@@ -1,0 +1,2780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NICU Escalation · Clinical Decision Support v5</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface2: #f7f8fa;
+  --border: #e2e6ec;
+  --border-dark: #cdd3dc;
+  --text: #1a2332;
+  --text-dim: #5a6a7e;
+  --text-muted: #9aaabb;
+  --red: #dc2626; --red-light: #fef2f2; --red-mid: #fee2e2;
+  --amber: #d97706; --amber-light: #fffbeb; --amber-mid: #fde68a;
+  --green: #059669; --green-light: #f0fdf4;
+  --blue: #2563eb; --blue-light: #eff6ff; --blue-mid: #dbeafe;
+  --violet: #7c3aed; --violet-light: #f5f3ff;
+  --teal: #0d9488; --teal-light: #f0fdfa;
+  --rose: #e11d48; --rose-light: #fff1f2;
+  --orange: #ea580c; --orange-light: #fff7ed;
+  --font: 'Figtree', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --radius: 10px; --radius-sm: 6px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* HEADER */
+.header { background: var(--surface); border-bottom: 1.5px solid var(--border); padding: 0 20px; display: flex; align-items: center; gap: 14px; height: 52px; flex-shrink: 0; box-shadow: var(--shadow-sm); }
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 30px; height: 30px; background: var(--red); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.logo-text { font-size: 0.95rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+.logo-text span { color: var(--red); }
+.logo-sub { font-size: 0.64rem; color: var(--text-muted); font-weight: 400; letter-spacing: 0.04em; }
+.header-sep { flex: 1; }
+.disclaimer-badge { background: var(--amber-light); border: 1px solid var(--amber-mid); color: var(--amber); font-size: 0.62rem; font-weight: 600; padding: 3px 9px; border-radius: 100px; letter-spacing: 0.05em; white-space:nowrap; }
+.clock { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); background: var(--surface2); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); }
+
+/* LAYOUT */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* LEFT PATIENT PANEL */
+.patient-panel { width: 272px; min-width: 272px; background: var(--surface); border-right: 1.5px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+.panel-section { border-bottom: 1px solid var(--border); }
+
+/* Collapsible sections */
+.sec-header {
+  padding: 9px 14px;
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none;
+  transition: background 0.12s;
+}
+.sec-header:hover { background: var(--surface2); }
+.sec-icon { font-size: 0.85rem; min-width: 16px; }
+.sec-label {
+  flex: 1; font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+}
+.sec-status { display: flex; gap: 3px; align-items: center; }
+.sec-dot-wrap { display: flex; gap: 2px; }
+.sec-arrow {
+  font-size: 0.55rem; color: var(--text-muted);
+  transition: transform 0.2s; line-height: 1;
+}
+.sec-arrow.open { transform: rotate(180deg); }
+.sec-body { padding: 0 14px 12px; display: none; }
+.sec-body.open { display: block; }
+
+/* Patient info always visible — special compact header */
+.sec-header.always-open { cursor: default; }
+.sec-header.always-open:hover { background: transparent; }
+
+/* Abnormal count badge on collapsed header */
+.sec-count {
+  font-size: 0.58rem; font-weight: 700;
+  padding: 1px 6px; border-radius: 100px;
+  background: var(--red-mid); color: var(--red);
+  display: none;
+}
+.sec-count.show { display: inline-block; }
+.sec-count.warn { background: var(--amber-mid); color: #92400e; }
+
+.field-label { font-size: 0.67rem; font-weight: 600; color: var(--text-dim); margin-bottom: 3px; }
+.field-group { margin-bottom: 7px; }
+.field-row { display: flex; gap: 7px; }
+.field-row .field-group { flex: 1; }
+
+input[type="text"], input[type="number"], select, textarea {
+  font-family: var(--font); font-size: 0.78rem; background: var(--surface2);
+  border: 1.5px solid var(--border); color: var(--text); padding: 5px 8px;
+  border-radius: var(--radius-sm); width: 100%; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+input.abnormal { border-color: var(--red) !important; background: var(--red-light) !important; }
+input.warning { border-color: var(--amber) !important; background: var(--amber-light) !important; }
+
+.vital-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.vital-item { position: relative; }
+.vital-item input { padding-right: 28px; }
+.vital-unit { position: absolute; right: 7px; bottom: 7px; font-size: 0.58rem; color: var(--text-muted); font-family: var(--mono); pointer-events: none; }
+.vital-dot { position: absolute; top: 0; right: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--border-dark); transition: background 0.2s; }
+.vital-dot.red { background: var(--red); box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
+.vital-dot.amber { background: var(--amber); box-shadow: 0 0 0 2px rgba(217,119,6,0.2); }
+.vital-dot.green { background: var(--green); }
+
+textarea { resize: none; height: 58px; line-height: 1.5; font-size: 0.73rem; }
+
+/* ABG SECTION */
+.abg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.abg-result {
+  margin-top: 8px; padding: 8px 10px; border-radius: 7px;
+  font-size: 0.68rem; line-height: 1.5; display: none;
+  border-left: 3px solid var(--blue); background: var(--blue-light);
+}
+.abg-result.show { display: block; }
+.abg-result.critical { border-color: var(--red); background: var(--red-light); }
+.abg-result.warning { border-color: var(--amber); background: var(--amber-light); }
+.abg-result.normal { border-color: var(--green); background: var(--green-light); }
+.abg-result-title { font-weight: 700; font-size: 0.7rem; margin-bottom: 4px; }
+.abg-result ul { padding-left: 14px; }
+.abg-result li { margin-bottom: 2px; }
+.abg-btn { width: 100%; margin-top: 6px; background: var(--teal); color: white; border: none; border-radius: var(--radius-sm); font-family: var(--font); font-size: 0.72rem; font-weight: 600; padding: 7px; cursor: pointer; transition: all 0.15s; }
+.abg-btn:hover { background: #0f766e; }
+
+/* MANUAL CONDITIONS */
+.cond-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cond-item { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface2); cursor: pointer; transition: all 0.12s; font-size: 0.68rem; font-weight: 500; color: var(--text-dim); }
+.cond-item:hover { border-color: var(--amber); color: var(--text); }
+.cond-item.active { border-color: var(--red); background: var(--red-light); color: var(--red); font-weight: 600; }
+.cond-item input[type=checkbox] { display:none; }
+.cond-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-dark); flex-shrink: 0; }
+.cond-item.active .cond-dot { background: var(--red); }
+
+/* DETECT BUTTON */
+.detect-btn { width: 100%; margin-top: 6px; background: var(--blue); color: white; border: none; border-radius: var(--radius-sm); font-family: var(--font); font-size: 0.73rem; font-weight: 600; padding: 7px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em; }
+.detect-btn:hover { background: #1d4ed8; box-shadow: var(--shadow-sm); }
+.auto-result { margin-top: 7px; padding: 6px 9px; border-radius: 6px; font-size: 0.67rem; font-weight: 500; display: none; line-height: 1.4; }
+.auto-result.warn { background: var(--red-light); border: 1px solid var(--red-mid); color: var(--red); display: block; }
+.auto-result.ok { background: var(--green-light); border: 1px solid #bbf7d0; color: var(--green); display: block; }
+
+/* ─── CENTER PANEL ─── */
+.center-panel { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.center-header { display: flex; align-items: center; gap: 12px; }
+.center-title { font-size: 0.95rem; font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+.center-sub { font-size: 0.7rem; color: var(--text-dim); margin-top: 1px; }
+
+/* ═══ ALERT SUMMARY BOX ═══ */
+.alert-summary-box {
+  background: var(--surface); border-radius: var(--radius); border: 2px solid var(--border);
+  padding: 12px 14px; box-shadow: var(--shadow-sm);
+  transition: border-color 0.3s;
+}
+.alert-summary-box.has-alerts { border-color: var(--red); background: #fff5f5; }
+.alert-summary-box.has-warnings { border-color: var(--amber); background: #fffbf0; }
+.alert-box-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.alert-box-title { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.alert-box-title.active-alerts { color: var(--red); }
+.alert-empty { font-size: 0.72rem; color: var(--text-muted); font-style: italic; }
+.alert-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.alert-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 100px; font-size: 0.67rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; border: 1.5px solid transparent;
+}
+.alert-pill.critical { background: var(--red-mid); color: var(--red); border-color: #fca5a5; }
+.alert-pill.warning { background: var(--amber-mid); color: #92400e; border-color: #fbbf24; }
+.alert-pill.info { background: var(--blue-mid); color: var(--blue); border-color: #93c5fd; }
+.alert-pill.manual { background: var(--violet-light); color: var(--violet); border-color: #c4b5fd; }
+.alert-pill:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.alert-pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* Category tabs */
+.cat-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+.cat-tab { padding: 4px 11px; border-radius: 100px; font-size: 0.69rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-dim); transition: all 0.15s; font-family: var(--font); }
+.cat-tab:hover { border-color: var(--blue); color: var(--blue); }
+.cat-tab.active { color: white; border-color: transparent; }
+
+/* Event grid */
+.event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.event-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 11px 12px; cursor: pointer; transition: all 0.15s; position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
+.event-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.event-card.active { border-width: 2px; box-shadow: var(--shadow); }
+.event-card.auto-flagged { animation: card-pulse 2.5s infinite; }
+.event-card.manual-flagged { border-color: var(--violet); background: var(--violet-light); }
+@keyframes card-pulse { 0%,100% { box-shadow: var(--shadow-sm); } 50% { box-shadow: 0 0 0 3px rgba(220,38,38,0.25), var(--shadow); } }
+.card-stripe { position: absolute; top: 0; left: 0; width: 100%; height: 3px; border-radius: var(--radius) var(--radius) 0 0; }
+.card-sev { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; }
+.sev-critical { background: var(--red); box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
+.sev-high { background: var(--amber); }
+.sev-moderate { background: var(--green); }
+.event-icon { font-size: 1.2rem; margin-bottom: 5px; margin-top: 3px; }
+.event-name { font-size: 0.79rem; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 2px; }
+.event-cat-tag { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.flag-badge { position: absolute; bottom: 7px; right: 8px; font-size: 0.55rem; font-weight: 700; padding: 1px 5px; border-radius: 100px; letter-spacing: 0.05em; }
+.flag-auto { background: var(--red-mid); color: var(--red); }
+.flag-manual { background: var(--violet-light); color: var(--violet); }
+.flag-abg { background: var(--teal-light); color: var(--teal); border: 1px solid #99f6e4; }
+
+/* RIGHT ESCALATION PANEL */
+.escalation-panel { width: 410px; min-width: 380px; background: var(--surface); border-left: 1.5px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.esc-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.no-event { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); padding: 40px; }
+.no-event-icon { font-size: 2.8rem; opacity: 0.25; }
+.no-event-text { font-size: 0.78rem; text-align: center; line-height: 1.5; }
+
+/* Esc header */
+.esc-header { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.esc-event-name { font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); margin-bottom: 4px; }
+.esc-threshold-chip { display: inline-block; font-size: 0.66rem; font-weight: 600; padding: 3px 9px; border-radius: 100px; }
+
+/* Severity selector */
+.severity-selector { padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.sev-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+.sev-options { display: flex; flex-direction: column; gap: 5px; }
+.sev-btn { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface2); cursor: pointer; text-align: left; font-family: var(--font); transition: all 0.15s; width: 100%; }
+.sev-btn:hover { border-color: var(--blue); background: var(--blue-light); }
+.sev-btn.selected { border-color: var(--red); background: var(--red-light); }
+.sev-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sev-btn-text { font-size: 0.74rem; font-weight: 500; color: var(--text); line-height: 1.3; }
+
+/* Timer */
+.timer-bar { display: none; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--border); background: #fff8f8; flex-shrink: 0; }
+.timer-bar.show { display: flex; }
+.timer-left { display: flex; flex-direction: column; }
+.timer-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; line-height: 1; color: var(--green); transition: color 0.3s; }
+.timer-desc { font-size: 0.63rem; color: var(--text-dim); margin-top: 2px; max-width: 180px; line-height: 1.3; }
+.timer-sep { flex: 1; }
+.timer-reset { font-family: var(--font); font-size: 0.68rem; font-weight: 600; padding: 5px 11px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
+.timer-reset:hover { border-color: var(--blue); color: var(--blue); }
+
+/* Actions */
+.action-area { padding: 12px 16px; flex: 1; overflow-y: auto; }
+.role-block { margin-bottom: 14px; }
+.role-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; padding: 3px 9px; border-radius: 100px; margin-bottom: 8px; }
+.role-nurse { background: var(--blue-mid); color: var(--blue); border: 1px solid #bfdbfe; }
+.role-physician { background: var(--red-mid); color: var(--red); border: 1px solid #fca5a5; }
+.action-list { display: flex; flex-direction: column; gap: 4px; }
+.action-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface2); cursor: pointer; text-align: left; font-family: var(--font); width: 100%; transition: all 0.12s; }
+.action-item:hover { border-color: var(--blue-mid); background: var(--blue-light); }
+.action-item.done { border-color: #86efac; background: var(--green-light); }
+.action-check { width: 15px; height: 15px; min-width: 15px; border-radius: 4px; border: 1.5px solid var(--border-dark); margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: white; transition: all 0.12s; flex-shrink: 0; background: white; }
+.action-item.done .action-check { background: var(--green); border-color: var(--green); }
+.action-item.done .action-check::after { content: '✓'; }
+.action-text { font-size: 0.73rem; color: var(--text); line-height: 1.45; font-weight: 400; }
+.action-item.done .action-text { color: var(--text-dim); text-decoration: line-through; text-decoration-color: #9ca3af; }
+
+/* References block */
+.ref-block { margin: 0 16px 12px; padding: 8px 11px; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; border-left: 3px solid var(--teal); }
+.ref-title { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--teal); margin-bottom: 5px; }
+.ref-list { font-size: 0.63rem; color: var(--text-dim); line-height: 1.6; }
+.ref-list a { color: var(--blue); text-decoration: none; }
+.ref-list a:hover { text-decoration: underline; }
+
+/* Escalate section */
+.escalate-section { padding: 12px 16px; border-top: 1.5px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.esc-sec-title { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.esc-name-row { display: flex; gap: 7px; margin-bottom: 8px; }
+.esc-name-row .field-group { flex: 1; }
+.webhook-row { display: flex; gap: 7px; margin-bottom: 8px; align-items: flex-end; }
+.webhook-row .field-group { flex: 1; }
+.webhook-status { font-size: 0.6rem; font-weight: 600; padding: 2px 7px; border-radius: 100px; margin-bottom: 3px; white-space: nowrap; }
+.webhook-status.ok { background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; }
+.webhook-status.err { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
+.webhook-status.idle { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+.esc-btn { width: 100%; padding: 9px; border-radius: 7px; font-family: var(--font); font-size: 0.8rem; font-weight: 700; cursor: pointer; border: none; transition: all 0.15s; margin-bottom: 5px; letter-spacing: 0.01em; }
+.esc-physician { background: var(--red); color: white; }
+.esc-physician:hover { background: #b91c1c; }
+.esc-code { background: linear-gradient(135deg, #7f1d1d, #dc2626); color: white; letter-spacing: 0.04em; animation: code-glow 2.5s infinite; display: none; }
+@keyframes code-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } 50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.3); } }
+.esc-code:hover { filter: brightness(1.15); }
+
+/* Audit log */
+.audit-log { padding: 10px 16px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; display: none; max-height: 140px; overflow-y: auto; }
+.audit-log.show { display: block; }
+.audit-title { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; }
+.audit-clear { font-weight: 500; cursor: pointer; color: var(--red); letter-spacing: 0; text-transform: none; font-size: 0.65rem; }
+.audit-entry { display: flex; gap: 9px; padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 0.68rem; line-height: 1.4; }
+.audit-entry:last-child { border-bottom: none; }
+.audit-time { font-family: var(--mono); color: var(--text-muted); min-width: 40px; font-size: 0.63rem; }
+.audit-msg { color: var(--text); }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(60px); background: var(--text); color: white; padding: 8px 16px; border-radius: 100px; font-size: 0.76rem; font-weight: 500; z-index: 999; transition: transform 0.25s ease; white-space: nowrap; pointer-events: none; max-width: 90vw; text-align: center; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { background: var(--green); }
+.toast.error { background: var(--red); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+.hidden { display: none !important; }
+
+/* Protocol Browser */
+.proto-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 7px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  cursor: pointer; transition: all 0.12s;
+}
+.proto-item:hover { border-color: var(--blue); background: var(--blue-light); transform: translateX(2px); }
+.proto-item.flagged-critical { border-color: var(--red); background: var(--red-light); }
+.proto-item.flagged-warning { border-color: var(--amber); background: var(--amber-light); }
+.proto-item.flagged-manual { border-color: var(--violet); background: var(--violet-light); }
+.proto-icon { font-size: 1.1rem; min-width: 22px; text-align: center; }
+.proto-info { flex: 1; min-width: 0; }
+.proto-name { font-size: 0.76rem; font-weight: 700; color: var(--text); }
+.proto-cat { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+.proto-badge { font-size: 0.58rem; font-weight: 700; padding: 2px 6px; border-radius: 100px; white-space: nowrap; }
+.proto-badge.critical { background: var(--red-mid); color: var(--red); }
+.proto-badge.warning { background: var(--amber-mid); color: #92400e; }
+.proto-badge.manual { background: var(--violet-light); color: var(--violet); }
+.proto-badge.normal { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+.proto-section-header { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); padding: 6px 4px 3px; margin-top: 4px; }
+
+/* NRP Target table */
+.nrp-spo2-table {
+  margin: 10px 0; border-radius: 7px; overflow: hidden;
+  border: 1.5px solid #fca5a5; font-size: 0.7rem;
+}
+.nrp-spo2-table th { background: #7f1d1d; color: white; padding: 5px 10px; text-align: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; }
+.nrp-spo2-table td { padding: 4px 10px; text-align: center; border-bottom: 1px solid #fee2e2; }
+.nrp-spo2-table tr:last-child td { border-bottom: none; }
+.nrp-spo2-table tr:nth-child(even) td { background: #fff5f5; }
+.nrp-info-box { background: #fff5f5; border: 1.5px solid #fca5a5; border-radius: 7px; padding: 8px 11px; margin: 8px 0; font-size: 0.7rem; }
+.nrp-info-box strong { color: #7f1d1d; }
+
+
+</style>
+</head>
+<body>
+
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">🏥</div>
+    <div>
+      <div class="logo-text">NICU <span>Escalate</span></div>
+      <div class="logo-sub">Clinical Decision Support · Nurse &amp; Neonatologist</div>
+    </div>
+  </div>
+  <div class="header-sep"></div>
+  <div style="font-size:0.65rem; color:var(--text-muted); text-align:right; line-height:1.5; padding-right:4px;">
+    <span style="color:var(--green); font-weight:600;">✓ v5.1 Protocol-Verified</span><br>
+    AIIMS 2019 · NRP 9th Ed 2025 (AAP/AHA) · NNF Shock CPG 2023 · IAP STG 2022 · Indian Pediatrics ABG 2001
+  </div>
+  <div class="disclaimer-badge">⚠ Reference Only — Clinical Judgement Applies</div>
+  <div class="clock" id="clockDisplay">00:00:00</div>
+</div>
+
+<div class="main">
+
+  <!-- ═══ LEFT: PATIENT PANEL ═══ -->
+  <div class="patient-panel">
+
+    <!-- Patient Info — always visible -->
+    <div class="panel-section">
+      <div class="sec-header always-open">
+        <span class="sec-icon">📋</span>
+        <span class="sec-label">Patient Info</span>
+      </div>
+      <div class="sec-body open" style="padding-top:0">
+        <div class="field-row">
+          <div class="field-group"><div class="field-label">Bed / ID</div><input type="text" id="bedId" placeholder="B-04"></div>
+          <div class="field-group"><div class="field-label">GA (wks)</div><input type="number" id="ga" placeholder="30" min="22" max="45" step="0.1"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><div class="field-label">Weight (g)</div><input type="number" id="weight" placeholder="1200"></div>
+          <div class="field-group"><div class="field-label">Day of Life</div><input type="number" id="dol" placeholder="3" min="0"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><div class="field-label">Birth Wt (g)</div><input type="number" id="bw" placeholder="1200"></div>
+          <div class="field-group"><div class="field-label">PNA (days)</div><input type="number" id="pna" placeholder="3" min="0"></div>
+        </div>
+        <button class="detect-btn" style="margin-top:8px" onclick="autoDetect()">⚡ Auto-Detect from All Data</button>
+        <div class="auto-result" id="autoResult"></div>
+      </div>
+    </div>
+
+    <!-- Vitals — collapsible, open if any abnormal -->
+    <div class="panel-section" id="sec-vitals">
+      <div class="sec-header" onclick="toggleSec('vitals')">
+        <span class="sec-icon">💉</span>
+        <span class="sec-label">Vitals</span>
+        <span class="sec-count" id="cnt-vitals"></span>
+        <div class="sec-dot-wrap" id="dots-vitals-preview"></div>
+        <span class="sec-arrow" id="arrow-vitals">▼</span>
+      </div>
+      <div class="sec-body" id="body-vitals">
+        <div class="vital-grid">
+          <div class="vital-item"><div class="field-label">HR</div>
+            <div style="position:relative"><input type="number" id="vHR" placeholder="140"><span class="vital-unit">/min</span><div class="vital-dot" id="dot-HR"></div></div></div>
+          <div class="vital-item"><div class="field-label">RR</div>
+            <div style="position:relative"><input type="number" id="vRR" placeholder="50"><span class="vital-unit">/min</span><div class="vital-dot" id="dot-RR"></div></div></div>
+          <div class="vital-item"><div class="field-label">SpO₂</div>
+            <div style="position:relative"><input type="number" id="vSpO2" placeholder="96"><span class="vital-unit">%</span><div class="vital-dot" id="dot-SpO2"></div></div></div>
+          <div class="vital-item"><div class="field-label">Temp</div>
+            <div style="position:relative"><input type="number" id="vTemp" placeholder="36.8" step="0.1"><span class="vital-unit">°C</span><div class="vital-dot" id="dot-Temp"></div></div></div>
+          <div class="vital-item" style="grid-column:span 2"><div class="field-label">BP Sys / Dias (mmHg)</div>
+            <div style="display:flex;gap:6px">
+              <div style="position:relative;flex:1"><input type="number" id="vBPs" placeholder="55"><div class="vital-dot" id="dot-BPs"></div></div>
+              <div style="position:relative;flex:1"><input type="number" id="vBPd" placeholder="32"><div class="vital-dot" id="dot-BPd"></div></div>
+            </div></div>
+          <div class="vital-item"><div class="field-label">CRT (sec)</div>
+            <div style="position:relative"><input type="number" id="vCRT" placeholder="2" step="0.5"><span class="vital-unit">sec</span><div class="vital-dot" id="dot-CRT"></div></div></div>
+          <div class="vital-item"><div class="field-label">UO (ml/kg/hr)</div>
+            <div style="position:relative"><input type="number" id="vUO" placeholder="2" step="0.1"><div class="vital-dot" id="dot-UO"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Labs — collapsible -->
+    <div class="panel-section" id="sec-labs">
+      <div class="sec-header" onclick="toggleSec('labs')">
+        <span class="sec-icon">🔬</span>
+        <span class="sec-label">Labs</span>
+        <span class="sec-count" id="cnt-labs"></span>
+        <div class="sec-dot-wrap" id="dots-labs-preview"></div>
+        <span class="sec-arrow" id="arrow-labs">▼</span>
+      </div>
+      <div class="sec-body" id="body-labs">
+        <div class="vital-grid">
+          <div class="vital-item"><div class="field-label">RBS (mg/dL)</div>
+            <div style="position:relative"><input type="number" id="lRBS" placeholder="75"><div class="vital-dot" id="dot-RBS"></div></div></div>
+          <div class="vital-item"><div class="field-label">Na (mEq/L)</div>
+            <div style="position:relative"><input type="number" id="lNa" placeholder="138"><div class="vital-dot" id="dot-Na"></div></div></div>
+          <div class="vital-item"><div class="field-label">K (mEq/L)</div>
+            <div style="position:relative"><input type="number" id="lK" placeholder="4.2" step="0.1"><div class="vital-dot" id="dot-K"></div></div></div>
+          <div class="vital-item"><div class="field-label">iCa (mmol/L)</div>
+            <div style="position:relative"><input type="number" id="lCa" placeholder="1.2" step="0.1"><div class="vital-dot" id="dot-Ca"></div></div></div>
+          <div class="vital-item"><div class="field-label">Hct (%)</div>
+            <div style="position:relative"><input type="number" id="lHct" placeholder="55"><div class="vital-dot" id="dot-Hct"></div></div></div>
+          <div class="vital-item"><div class="field-label">TSB (mg/dL)</div>
+            <div style="position:relative"><input type="number" id="lTSB" placeholder="8" step="0.1"><div class="vital-dot" id="dot-TSB"></div></div></div>
+          <div class="vital-item"><div class="field-label">Hb (g/dL)</div>
+            <div style="position:relative"><input type="number" id="lHb" placeholder="14" step="0.1"><div class="vital-dot" id="dot-Hb"></div></div></div>
+          <div class="vital-item"><div class="field-label">Lactate (mmol/L)</div>
+            <div style="position:relative"><input type="number" id="lLact" placeholder="1.5" step="0.1"><div class="vital-dot" id="dot-Lact"></div></div></div>
+        </div>
+        <!-- ABG sub-section -->
+        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);">
+          <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">🫧 ABG</div>
+          <div class="abg-grid">
+            <div class="vital-item"><div class="field-label">pH</div><input type="number" id="abgPH" placeholder="7.35" step="0.01" min="6.8" max="7.8"></div>
+            <div class="vital-item"><div class="field-label">PaCO₂ (mmHg)</div><input type="number" id="abgCO2" placeholder="45" step="1"></div>
+            <div class="vital-item"><div class="field-label">HCO₃⁻ (mEq/L)</div><input type="number" id="abgHCO3" placeholder="22" step="0.5"></div>
+            <div class="vital-item"><div class="field-label">BE (mmol/L)</div><input type="number" id="abgBE" placeholder="0" step="0.5" min="-30" max="30"></div>
+            <div class="vital-item"><div class="field-label">PaO₂ (mmHg)</div><input type="number" id="abgPO2" placeholder="70" step="1"></div>
+            <div class="vital-item"><div class="field-label">SaO₂ (%)</div><input type="number" id="abgSaO2" placeholder="95" step="1"></div>
+          </div>
+          <button class="abg-btn" onclick="analyseABG()">🔍 Analyse ABG</button>
+          <div class="abg-result" id="abgResult"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ventilator — collapsible -->
+    <div class="panel-section" id="sec-vent">
+      <div class="sec-header" onclick="toggleSec('vent')">
+        <span class="sec-icon">🌬</span>
+        <span class="sec-label">Ventilator</span>
+        <span class="sec-count" id="cnt-vent"></span>
+        <span class="sec-arrow" id="arrow-vent">▼</span>
+      </div>
+      <div class="sec-body" id="body-vent">
+        <div class="vital-grid">
+          <div class="vital-item"><div class="field-label">Mode</div>
+            <select id="vMode"><option value="">—</option><option>Room Air</option><option>LFNC</option><option>HFNC</option><option>CPAP</option><option>NIV / BiPAP</option><option>IMV / SIMV</option><option>HFO</option></select></div>
+          <div class="vital-item"><div class="field-label">FiO₂ (%)</div><input type="number" id="vFiO2" placeholder="21" min="21" max="100"></div>
+          <div class="vital-item"><div class="field-label">PEEP (cmH₂O)</div><input type="number" id="vPEEP" placeholder="5" step="0.5"></div>
+          <div class="vital-item"><div class="field-label">PIP / PC</div><input type="number" id="vPIP" placeholder="18" step="0.5"></div>
+          <div class="vital-item"><div class="field-label">Rate (/min)</div><input type="number" id="vRate" placeholder="40"></div>
+          <div class="vital-item"><div class="field-label">Ti (sec)</div><input type="number" id="vTi" placeholder="0.35" step="0.05"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Medications — collapsible -->
+    <div class="panel-section" id="sec-meds">
+      <div class="sec-header" onclick="toggleSec('meds')">
+        <span class="sec-icon">💊</span>
+        <span class="sec-label">Active Infusions / Meds</span>
+        <span class="sec-count" id="cnt-meds"></span>
+        <span class="sec-arrow" id="arrow-meds">▼</span>
+      </div>
+      <div class="sec-body" id="body-meds">
+        <textarea id="meds" placeholder="e.g. Dopamine 5 mcg/kg/min&#10;TPN @ 80 ml/kg/day&#10;Caffeine citrate 5 mg/kg/day&#10;Morphine 10 mcg/kg/hr"></textarea>
+      </div>
+    </div>
+
+    <!-- Clinical Flags — collapsible -->
+    <div class="panel-section" id="sec-flags">
+      <div class="sec-header" onclick="toggleSec('flags')">
+        <span class="sec-icon">☑</span>
+        <span class="sec-label">Clinical Flags</span>
+        <span class="sec-count" id="cnt-flags"></span>
+        <span class="sec-arrow" id="arrow-flags">▼</span>
+      </div>
+      <div class="sec-body" id="body-flags">
+        <div class="cond-grid" id="condGrid"></div>
+      </div>
+    </div>
+
+  </div><!-- /patient-panel -->
+
+  <!-- ═══ CENTER: EVENT SELECTOR ═══ -->
+  <div class="center-panel">
+
+    <!-- ALERT SUMMARY BOX -->
+    <div class="alert-summary-box" id="alertSummaryBox">
+      <div class="alert-box-header">
+        <div class="alert-box-title" id="alertBoxTitle">⚡ Active Clinical Alerts</div>
+      </div>
+      <div id="alertPillsContainer">
+        <div class="alert-empty">No active alerts — enter patient data and click Auto-Detect, or manually flag conditions above</div>
+      </div>
+    </div>
+
+    <div class="center-header">
+      <div>
+        <div class="center-title">Clinical Events</div>
+        <div class="center-sub">Tap an event · Flagged events are highlighted · Actions load on the right</div>
+      </div>
+    </div>
+
+    <div class="cat-tabs" id="catTabs"></div>
+    <div class="event-grid" id="eventGrid"></div>
+
+  </div>
+
+  <!-- ═══ RIGHT: ESCALATION PANEL ═══ -->
+  <div class="escalation-panel">
+    <div class="esc-scroll">
+
+      <!-- Default: empty state until event selected -->
+      <div id="noEvent" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:12px 16px 8px; border-bottom:1px solid var(--border); background:var(--surface2); flex-shrink:0;">
+          <div style="font-size:0.7rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); margin-bottom:2px;">⚡ Active Alerts</div>
+          <div style="font-size:0.65rem; color:var(--text-muted);">Flagged events appear below · Tap any to open protocol</div>
+        </div>
+        <div id="activeAlertsList" style="flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:4px;"></div>
+        <div id="noAlertsMsg" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 20px; text-align:center; color:var(--text-muted);">
+          <div style="font-size:2.2rem; opacity:0.18; margin-bottom:10px;">🏥</div>
+          <div style="font-size:0.75rem; font-weight:600; margin-bottom:6px;">No active alerts</div>
+          <div style="font-size:0.68rem; line-height:1.5;">Enter patient data and tap<br><strong>⚡ Auto-Detect</strong><br>or select an event from the centre panel</div>
+        </div>
+      </div>
+
+      <div id="escContent" class="hidden" style="display:flex;flex-direction:column;flex:1;">
+
+        <!-- Header -->
+        <div class="esc-header">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <button onclick="closeProtocol()" style="font-family:var(--font);font-size:0.62rem;font-weight:600;padding:2px 8px;border-radius:5px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;transition:all 0.12s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">← Active Alerts</button>
+          </div>
+          <div class="esc-event-name" id="escName"></div>
+          <div id="escChip" class="esc-threshold-chip"></div>
+        </div>
+
+        <!-- Severity selector -->
+        <div class="severity-selector" id="severitySel">
+          <div class="sev-label">Select severity / threshold</div>
+          <div class="sev-options" id="sevOptions"></div>
+        </div>
+
+        <!-- Timer -->
+        <div class="timer-bar" id="timerBar">
+          <div class="timer-left">
+            <div class="timer-num" id="timerNum">--:--</div>
+            <div class="timer-desc" id="timerDesc"></div>
+          </div>
+          <div class="timer-sep"></div>
+          <button class="timer-reset" onclick="resetTimer()">↺ Reset</button>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-area" id="actionArea"></div>
+
+        <!-- References -->
+        <div class="ref-block" id="refBlock" style="display:none">
+          <div class="ref-title">📚 References</div>
+          <div class="ref-list" id="refList"></div>
+        </div>
+
+        <!-- Escalate -->
+        <div class="escalate-section">
+          <div class="esc-sec-title">Escalation</div>
+          <div class="esc-name-row">
+            <div class="field-group">
+              <div class="field-label">Neonatologist / Consultant</div>
+              <input type="text" id="neoName" placeholder="Dr. ...">
+            </div>
+          </div>
+          <div class="webhook-row">
+            <div class="field-group" style="flex:2">
+              <div class="field-label">Google Chat Webhook URL</div>
+              <input type="text" id="webhookUrl" placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=..." value="https://chat.googleapis.com/v1/spaces/AAAA0wLarmw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=A27XoQspEF9ciX4pi9fOOrXBrB9H9ZXOCG480sup5S4">
+            </div>
+            <div>
+              <div class="webhook-status ok" id="webhookStatus">✓ Configured</div>
+            </div>
+          </div>
+          <button class="esc-btn esc-physician" onclick="doEscalate('Neonatologist')">↑ Escalate to Neonatologist</button>
+          <button class="esc-btn esc-code" id="codeBtn" onclick="doEscalate('CODE BLUE')">🚨 ACTIVATE CODE BLUE</button>
+        </div>
+
+        <!-- Audit log -->
+        <div class="audit-log" id="auditLog">
+          <div class="audit-title">
+            Action Log
+            <span class="audit-clear" onclick="clearAudit()">Clear</span>
+          </div>
+          <div id="auditEntries"></div>
+        </div>
+
+      </div><!-- /escContent -->
+
+    </div>
+  </div><!-- /escalation-panel -->
+
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// NICU ESCALATION APP v5
+// Protocol Sources: AIIMS 2019, IAP-NRP 2022, NNF Shock CPG 2023,
+//   IAP STG (SVT/Seizures) 2022, Indian Pediatrics ABG 2001
+// ═══════════════════════════════════════════════════════════════
+
+// ─── STATE ────────────────────────────────────────────────────
+let selectedEvent = null;
+let selectedThresholdIdx = null;
+let checkedActions = new Set();
+let auditLog = [];
+let timerInterval = null;
+let timerRemaining = 0;
+let activeCat = 'All';
+let activeAlerts = [];     // {type:'critical'|'warning'|'info'|'manual', label, eventId}
+let manualFlags = new Set();  // set of manual condition IDs
+
+// ─── CATEGORY COLOURS ─────────────────────────────────────────
+const CAT_COLORS = {
+  'Cardiovascular': '#dc2626',
+  'Respiratory':    '#2563eb',
+  'Temperature':    '#d97706',
+  'Neurological':   '#7c3aed',
+  'Metabolic':      '#0d9488',
+  'GI':             '#ea580c',
+  'Lines':          '#64748b',
+  'Haematology':    '#b45309',
+  'Resuscitation':  '#7f1d1d',
+  'General':        '#be185d',
+};
+
+// ─── MANUAL CLINICAL CONDITIONS ───────────────────────────────
+const MANUAL_CONDITIONS = [
+  { id: 'apnea_obs',    label: 'Apnea (Observed)',  eventId: 'apnea' },
+  { id: 'seizure_obs',  label: 'Seizure (Observed)', eventId: 'seizures' },
+  { id: 'vent_det',     label: 'Vent Deteriorating', eventId: 'vent_deterioration' },
+  { id: 'ext_accid',    label: 'Accidental Extubation', eventId: 'extubation' },
+  { id: 'nec_susp',     label: 'NEC Suspected',     eventId: 'nec' },
+  { id: 'feed_int',     label: 'Feed Intolerance',  eventId: 'feed_intol' },
+  { id: 'line_issue',   label: 'Line Issue',         eventId: 'lines' },
+  { id: 'jaundice_vis', label: 'Visible Jaundice',  eventId: 'jaundice' },
+  { id: 'skin_color',   label: 'Pale / Mottled',    eventId: 'shock' },
+  { id: 'sudden_det',   label: 'Sudden Deterioration', eventId: 'deterioration' },
+  { id: 'nrp_birth',    label: 'Birth / Resuscitation', eventId: 'nrp_resus' },
+];
+
+
+const EVENTS = [
+
+  // ─── CARDIOVASCULAR ───────────────────────────────────
+  // Sources: IAP NRP 2022, NNF Shock CPG 2022, AIIMS Protocols
+  {
+    id: 'bradycardia', name: 'Bradycardia', icon: '💓',
+    category: 'Cardiovascular', severity: 'critical',
+    triggerParam: 'HR',
+    thresholds: [
+      {
+        label: 'HR 60–80 bpm',
+        autoTrigger: v => v < 80 && v >= 60,
+        timerSec: 300, timerLabel: 'Escalate if no improvement in 5 min',
+        codeBlue: false,
+        nurseActions: [
+          'Confirm HR — auscultate apical for 60 sec',
+          'Check SpO₂ probe position; apply O₂ if SpO₂ < 90%',
+          'Check axillary temp — correct hypothermia if < 36.5°C',
+          'Check RBS — treat if < 40 mg/dL (notify physician)',
+          'Assess colour, tone, breathing effort',
+          'Start continuous monitoring; document 2 readings with times',
+          'Notify Neonatologist if HR < 80 for > 5 min or colour change'
+        ],
+        physicianActions: [
+          'Assess haemodynamic status: capillary refill time (CRT > 3 sec = abnormal), pulses, NIBP',
+          '12-lead ECG or rhythm strip — rule out AV block, sinus bradycardia, junctional rhythm',
+          'Check Na, K, iCa urgently — hyperkalaemia and hypocalcaemia cause bradycardia',
+          'Correct hypoglycaemia (10% Dextrose 2 ml/kg IV bolus) if RBS < 40 mg/dL',
+          'If haemodynamically compromised: NS bolus 10 ml/kg IV over 15–30 min (NNF Shock CPG: preterm 10 ml/kg, term 20 ml/kg)',
+          'Review medications — propranolol, digoxin, adenosine may cause bradycardia',
+          'If haemodynamic compromise persists: Dopamine 5–10 mcg/kg/min; escalate to senior/cardiologist',
+        ]
+      },
+      {
+        label: 'HR < 60 bpm — CRITICAL',
+        autoTrigger: v => v < 60,
+        timerSec: 60, timerLabel: 'IMMEDIATE — initiate CPR if pulseless',
+        codeBlue: true,
+        nurseActions: [
+          'CALL FOR HELP — alert all bedside staff NOW',
+          'Check brachial pulse — confirm pulselessness',
+          'If no pulse or HR < 60: START CPR — 3:1 compressions:ventilation',
+          'Apply PPV with bag-mask, 100% O₂, tight seal',
+          '2-thumb encircling technique; depth ⅓ AP diameter',
+          'ACTIVATE CODE BLUE',
+          'Prepare adrenaline 1:10,000 (0.1–0.3 ml/kg IV)',
+          'Prepare UVC kit; note CPR start time'
+        ],
+        physicianActions: [
+          'Attend bedside IMMEDIATELY — assign roles on arrival',
+          'Continue 3:1 CPR:PPV; reassess HR after every 30 compressions',
+          'Establish UVL (preferred) — adrenaline 0.2 ml/kg of 1:10,000 IV; repeat every 3–5 min (IAP NRP 2022)',
+          'If ETT: adrenaline 1.0 ml/kg of 1:10,000 until IV access established',
+          'If no response after 60 sec + adrenaline: check for pneumothorax (transilluminate); consider NS 10 ml/kg if blood loss suspected',
+          'Identify and correct reversible causes: Hypoxia, Hypovolaemia, Hypoglycaemia, Hypothermia',
+          'If HR remains 0 after 20 min: consider discontinuing resuscitation after team discussion with family',
+          'Debrief entire team after event',
+        ]
+      }
+    ],
+    refs: '1. IAP-NRP 2022 Neonatal Resuscitation Guidelines. | 2. NNF Shock CPG 2023. Diagnosis and Management of Shock in Neonates. | 3. AIIMS Protocols: Neonatology 2019.'
+  },
+
+  {
+    id: 'tachycardia', name: 'Tachycardia / SVT', icon: '⚡',
+    category: 'Cardiovascular', severity: 'high',
+    triggerParam: 'HR',
+    thresholds: [
+      {
+        label: 'HR 180–220 bpm — Sinus tachycardia likely',
+        autoTrigger: v => v >= 180 && v < 220,
+        timerSec: 300, timerLabel: 'Reassess in 5 min after addressing precipitant',
+        codeBlue: false,
+        nurseActions: [
+          'Confirm HR — auscultate for 60 sec',
+          'Check temp — fever is most common cause',
+          'Check warmer/incubator setpoint (36.5–37°C)',
+          'Check recent drug infusion rates (dopamine, caffeine)',
+          'Assess for pain, agitation, distension',
+          'Document 2 readings with timestamps',
+          'Notify Neonatologist if HR > 180 persists > 5 min'
+        ],
+        physicianActions: [
+          '12-lead ECG or rhythm strip — sinus tachycardia: P waves present, variable rate, rarely > 230/min',
+          'Check and correct: fever (sepsis workup if indicated), dehydration, pain, anaemia (check Hb)',
+          'Check Na, K, iCa — electrolyte abnormalities can cause tachycardia',
+          'Review ongoing infusions: adjust dopamine/adrenaline if supra-therapeutic',
+          'If rate > 220 or narrow-complex with no P waves: treat as SVT (see tier below)',
+          'Cardiology consultation if structural heart disease possible',
+        ]
+      },
+      {
+        label: 'HR > 220 bpm — SVT likely (narrow complex, no P waves)',
+        autoTrigger: v => v >= 220,
+        timerSec: 120, timerLabel: 'Physician must attend within 2 min',
+        codeBlue: false,
+        nurseActions: [
+          'Confirm HR on monitor — narrow complex, regular?',
+          'NOTIFY NEONATOLOGIST IMMEDIATELY',
+          'Apply ice pack to face (diving reflex) — hold 15–30 sec if instructed',
+          'Do NOT delay physician call for vagal manoeuvre',
+          'Prepare adenosine 100 mcg/kg IV for physician',
+          'Ensure large peripheral IV patent — antecubital preferred',
+          'Prepare DC cardioversion trolley (0.5 J/kg)',
+          'Document HR trend every 2 min'
+        ],
+        physicianActions: [
+          'Confirm SVT on ECG: narrow QRS, HR typically 240 ± 40/min, retrograde P wave in ST segment (AVRT), no P waves before QRS (IAP STG 2022)',
+          'Haemodynamically STABLE: Vagal manoeuvre first — ice-water-filled rubber glove applied firmly to face (90% effective, IAP APLS)',
+          'If vagal fails: Adenosine IV — 100 mcg/kg rapid bolus with immediate 5 mL NS flush; increase to 200 then 300 mcg/kg if needed (max 500 mcg/kg; max 300 mcg/kg if < 1 month)',
+          'Give adenosine via antecubital/large vein, 3-way tap; flush fast — half-life < 10 seconds',
+          'Haemodynamically UNSTABLE (shock, poor perfusion): Synchronised DC cardioversion 0.5 J/kg; increase to 1 J/kg then 2 J/kg',
+          'If adenosine fails and stable: Amiodarone 5 mg/kg over 30 min in 5% Dextrose (monitor for hypotension)',
+          'Verapamil ABSOLUTELY CONTRAINDICATED in infants < 1 year (causes profound hypotension and asystole)',
+          'Correct electrolytes (K, Ca) and rule out sepsis as precipitants',
+          'Cardiology consultation for maintenance therapy after reversion',
+        ]
+      }
+    ],
+    refs: '1. IAP STG 2022: Supraventricular Tachycardia. Indian Pediatrics. | 2. AIIMS Protocols: Neonatology 2019.'
+  },
+
+  {
+    id: 'shock', name: 'Shock / Hypotension', icon: '🩸',
+    category: 'Cardiovascular', severity: 'critical',
+    thresholds: [
+      {
+        label: 'Signs of shock — poor perfusion, rising HR, low BP ± hypotension',
+        autoTrigger: null,
+        timerSec: 120, timerLabel: 'Escalate within 2 min if features persist',
+        codeBlue: false,
+        nurseActions: [
+          'Check BP in both arms; confirm with manual auscultation if unsure',
+          'Assess CRT (> 3 sec = abnormal), pulses, colour',
+          'Check axillary temp and RBS urgently',
+          'Ensure IV access patent — draw blood for labs if possible',
+          'Place in supine position; avoid unnecessary stimulation',
+          'Notify Neonatologist immediately with full vital set',
+          'Prepare NS 10 ml/kg bolus for physician order'
+        ],
+        physicianActions: [
+          'Classify shock: Hypovolaemic, Septic/Distributive, Cardiogenic, Obstructive (NNF Shock CPG 2022)',
+          'Fluid resuscitation: NS 10 ml/kg IV over 15–30 min for PRETERM; 20 ml/kg for TERM — reassess after each bolus',
+          'Further fluid: up to total 20 ml/kg (preterm) or 40 ml/kg (term) if responsive to first bolus (septic/hypovolaemic shock)',
+          'Single 10 ml/kg cautiously only in cardiogenic shock with hypovolaemia',
+          'Blood culture before antibiotics; initiate broad-spectrum antibiotics early (septic shock)',
+          'First-line inotrope for septic shock: Dopamine 10 mcg/kg/min (escalate to 20 mcg/kg/min) OR Epinephrine 0.05–0.4 mcg/kg/min',
+          'First-line for preterm transitional shock: Epinephrine 0.05 mcg/kg/min, increase by 0.05 every 30 min to max 0.3 mcg/kg/min',
+          'Hydrocortisone if dopamine-refractory: 1 mg/kg (preterm) or 2 mg/kg (term) IV, repeat every 8–12 hr (NNF CPG)',
+          'Send: CBC, CRP, blood gas, lactate, glucose, electrolytes, blood culture, coagulation',
+          'Correct simultaneously: hypoglycaemia, hypocalcaemia, hypothermia, metabolic acidosis',
+          'Echo if cardiogenic shock suspected; consult cardiology',
+        ]
+      }
+    ],
+    refs: '1. NNF Shock CPG 2023. Diagnosis and Management of Shock in Neonates. | 2. AIIMS Protocols: Neonatology 2019. | 3. Zubrow AB et al. Determinants of blood pressure in infants. J Perinatol 1995.'
+  },
+
+  // ─── RESPIRATORY ──────────────────────────────────────
+  // Sources: AIIMS Apnea Ch.16, AIIMS Resp Distress Ch.15, AIIMS O2 Policy Ch.47, AIIMS IMV Ch.49
+  {
+    id: 'apnea', name: 'Apnea', icon: '😶',
+    category: 'Respiratory', severity: 'critical',
+    thresholds: [
+      {
+        label: 'Apnea > 20 sec OR shorter with HR < 80 bpm OR SpO₂ < 80–85%',
+        autoTrigger: null,
+        timerSec: 60, timerLabel: 'Escalate if not self-resolving in 60 sec',
+        codeBlue: false,
+        nurseActions: [
+          'Stimulate — gentle tactile stimulation (rub back, flick sole)',
+          'Reposition — sniffing position, clear airway',
+          'Apply supplemental O₂ if SpO₂ < 90%',
+          'Record: duration, colour change, HR drop, SpO₂ nadir',
+          'Check temp (hypothermia causes apnea)',
+          'Check RBS if first episode',
+          'Notify Neonatologist; document in notes'
+        ],
+        physicianActions: [
+          'Review apnea frequency — track trend over last 24–48 hours',
+          'Exclude secondary causes: sepsis, hypoglycaemia (RBS), hypocalcaemia, hypothermia, anaemia, polycythaemia, RDS, seizures, GERD',
+          'Investigations: RBS, Hct, Na/K/Ca, blood culture + sepsis screen if late-onset or unwell',
+          'Caffeine citrate (Methylxanthine Step 1): Loading 20 mg/kg IV; Maintenance 5–10 mg/kg/day OD (AIIMS Protocol Ch.16)',
+          'Aminophylline alternative: Loading 5–6 mg/kg; Maintenance 1.5–3 mg/kg Q8–12h (narrow window — monitor levels)',
+          'Start caffeine IV; switch to PO when tolerating feeds; continue until 34 wk PMA or apnea-free × 7 days',
+          'If frequent despite optimal methylxanthine: Step 2 — CPAP 5 cmH₂O',
+          'If persists on CPAP: Step 3 — NIPPV; Step 4 — Mechanical ventilation (PIP 10–12, PEEP 3–5, Rate 20–25, Ti 0.35–0.40)',
+          'ABG if requiring bag-mask or high-frequency events',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.16 — Apnea. | 2. Abu-Shaweesh JM, Martin RJ. Neonatal apnea. Pediatr Pulmonol 2008.'
+  },
+
+  {
+    id: 'desaturation', name: 'Desaturation', icon: '🫁',
+    category: 'Respiratory', severity: 'critical',
+    triggerParam: 'SpO2',
+    thresholds: [
+      {
+        label: 'SpO₂ < 90% (alarm limit < 88% per AIIMS policy)',
+        autoTrigger: v => v < 90,
+        timerSec: 30, timerLabel: 'Reassess in 30 sec — escalate if not recovering',
+        codeBlue: false,
+        nurseActions: [
+          'Reposition — sniffing position, clear oral secretions',
+          'Check O₂ delivery device and connections',
+          'Increase FiO₂ by 5–10% increments — titrate to SpO₂ 91–95%',
+          'Assess breathing effort, colour, HR',
+          'Suction if secretions audible',
+          'Record SpO₂ trend; notify Neonatologist if not recovering in 2 min'
+        ],
+        physicianActions: [
+          'DOPE checklist for ETT patients: Displacement, Obstruction (suction ETT), Pneumothorax, Equipment failure',
+          'If SpO₂ remains < 90% despite O₂ increase: Portable CXR urgently — check for PTX, atelectasis, worsening infiltrates',
+          'Transilluminate chest with bright LED torch if pneumothorax suspected and haemodynamically unstable',
+          'Needle decompression at 2nd ICS mid-clavicular line (right side first if bilateral suspected) if unstable with PTX',
+          'Blood gas: assess PaO₂, PCO₂, pH, oxygenation index (OI = MAP × FiO₂ / PaO₂ × 100)',
+          'OI interpretation: > 15 = V/Q mismatch; > 25 = iNO candidate; > 40 = ECMO criteria (AIIMS Ch.15)',
+          'Review ventilator settings if mechanically ventilated; increase PEEP/PIP cautiously',
+          'Adjust FiO₂ target: SpO₂ 91–95% (AIIMS/NNF policy); alarm limits 88–95%',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.47 — Oxygen Saturation Policy. | 2. AAP SpO₂ target guidelines 2020.'
+  },
+
+  {
+    id: 'resp_distress', name: 'Respiratory Distress', icon: '🌬️',
+    category: 'Respiratory', severity: 'high',
+    triggerParam: 'RR',
+    thresholds: [
+      {
+        label: 'RR > 60/min WITH 2 or more of: retractions (ICR/SCR/SSR), expiratory grunting, nasal flaring',
+        autoTrigger: v => v > 60,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Position upright/prone as per physician order',
+          'Increase monitoring: SpO₂, RR, HR continuously',
+          'Titrate FiO₂ to maintain SpO₂ 91–95% (preterm) or 94–98% (term)',
+          'Check CPAP/HFNC circuit — no leaks, correct prong size',
+          'Auscultate chest — note air entry symmetry',
+          'Assess recession, grunting, nasal flaring — score Silverman-Anderson',
+          'Notify Neonatologist if score worsening or FiO₂ requirement rising'
+        ],
+        physicianActions: [
+          'If Downes ≥ 4 or SA score ≥ 5: escalate respiratory support (AIIMS escalation ladder)',
+          'AIIMS ladder: Room Air → LFNC → HFNC → CPAP (5–6 cmH₂O) → NIPPV → InSurE → IMV',
+          'RDS (preterm, ≤ 32 wk, ground-glass CXR): CPAP 5 cmH₂O; if FiO₂ > 40% — early rescue surfactant by InSurE (AIIMS Ch.15)',
+          'TTN (near-term, wet-lung CXR): supportive — O₂/CPAP; rarely ventilation; resolves 1–5 days',
+          'MAS: O₂ first; CPAP if FiO₂ > 40%; intubate if PaO₂ < 50, PCO₂ > 60, pH < 7.25 with FiO₂ > 0.80',
+          'Ventilation indications: PCO₂ > 60 mmHg, pH < 7.20, decreased respiratory drive, apnea requiring bag-mask (AIIMS Ch.15)',
+          'Initial vent settings (RDS): PIP 14–18 (or VT 5–6 ml/kg), PEEP 5–6, Rate 50–60, FiO₂ per SpO₂, Ti 0.35',
+          'Portable CXR urgently; blood gas before and after escalation',
+          'Surfactant (poractant alfa/beractant) per AIIMS surfactant protocol if RDS confirmed',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.15 — Respiratory Distress. | 2. IAP-NRP 2022.'
+  },
+
+  {
+    id: 'vent_deterioration', name: 'Acute Vent Deterioration', icon: '🔧',
+    category: 'Respiratory', severity: 'critical',
+    thresholds: [
+      {
+        label: 'Sudden deterioration on mechanical ventilation — DOPE protocol',
+        autoTrigger: null,
+        timerSec: 120, timerLabel: 'Escalate immediately — do not delay',
+        codeBlue: false,
+        nurseActions: [
+          'Check ETT — confirm position, no kinking, no secretion obstruction',
+          'Manual bag ventilation — assess compliance and chest rise',
+          'Suction ETT (only if secretions suspected): 8 Fr, −100 mmHg, < 5 sec',
+          'Check all circuit connections and humidifier water level',
+          'Note SpO₂ trend and bilateral breath sounds',
+          'Notify Neonatologist if not improved after suctioning'
+        ],
+        physicianActions: [
+          'DOPE mnemonic at bedside (AIIMS IMV Ch.49):',
+          'D — Displacement: check ETT lip mark vs documented depth; direct laryngoscopy if uncertain',
+          'O — Obstruction: suction with suction catheter through ETT; if no improvement, change ETT',
+          'P — Pneumothorax: transilluminate in dark room with LED torch; if positive + haemodynamic compromise → needle decompression 2nd ICS MCL immediately',
+          'E — Equipment: check ventilator circuit integrity, all connections, power; switch to manual bag if equipment failure',
+          'If cause unclear after DOPE: disconnect from ventilator; hand-ventilate with bag to assess chest compliance',
+          'Pulmonary haemorrhage (blood-stained ETT secretions): increase PEEP by 2–3 cmH₂O, consider high-dose surfactant',
+          'Urgent portable CXR and blood gas after stabilisation',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.49 — Invasive Mechanical Ventilation. | 2. Keszler M. State of the art in conventional mechanical ventilation. J Perinatol 2009.'
+  },
+
+  {
+    id: 'extubation', name: 'Accidental Extubation', icon: '⚠️',
+    category: 'Respiratory', severity: 'critical',
+    thresholds: [
+      {
+        label: 'ETT displaced — partial or complete dislodgement',
+        autoTrigger: null,
+        timerSec: 60, timerLabel: 'Reintubation or definitive airway within 60 sec',
+        codeBlue: false,
+        nurseActions: [
+          'Manual bag-mask PPV — maintain SpO₂ > 90%',
+          'CALL NEONATOLOGIST IMMEDIATELY',
+          'Prepare re-intubation tray: ETT (size per weight), laryngoscope, stylet, tape',
+          'Note SpO₂ and HR continuously — document time of extubation',
+          'Suction oropharynx gently',
+          'Do NOT attempt re-intubation unless specifically trained and authorised'
+        ],
+        physicianActions: [
+          'Attend bedside IMMEDIATELY',
+          'If spontaneous breathing + gestation allows: trial of CPAP 5 cmH₂O before reintubation',
+          'Pre-medicate before reintubation per AIIMS NICU protocol to prevent pain and IVH risk',
+          'ETT size (AIIMS Ch.49): GA ≤ 28 wk → 2.5 mm; 28–34 wk → 3.0 mm; > 34 wk → 3.5 mm',
+          'Confirm ETT position: equal bilateral air entry + CO₂ detector colour change + ETT lip mark (verified) + CXR (tip at T2–T3)',
+          'Caffeine (20 mg/kg loading if not already prescribed) to reduce re-extubation failure in < 32 wk (50% reduction per AIIMS evidence)',
+          'Immediately post-extubation CPAP is preferred to reduce re-intubation failure (AIIMS Ch.49)',
+          'Review cause: inadequate fixation, agitation, insufficient sedation — adjust management',
+          'Complete incident documentation and escalation log',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.49. | 2. Singh N, et al. Managing accidental extubation. Neonatology 2017.'
+  },
+
+  {
+    id: 'resp_upgrade', name: 'Respiratory Support Upgrade', icon: '↑',
+    category: 'Respiratory', severity: 'moderate',
+    thresholds: [
+      {
+        label: 'Escalation of respiratory support level required',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Increase FiO₂ — titrate to target SpO₂',
+          'Notify Neonatologist: FiO₂ requirement, SpO₂ trend, breathing effort',
+          'Prepare for respiratory support upgrade (CPAP → HFNC → NIV → IMV)',
+          'Prepare intubation tray if escalation to IMV anticipated',
+          'Ensure IV access patent',
+          'Document current settings and all changes with timestamps'
+        ],
+        physicianActions: [
+          'AIIMS escalation ladder (AIIMS Ch.15 + O₂ Policy Ch.47): Room Air → LFNC (0.5–2 L/min) → HFNC (2–8 L/min) → CPAP (5–6 cmH₂O) → NIPPV → InSurE → IMV',
+          'Avoid unnecessary escalation — first optimise current support (prong size, interface, positioning)',
+          'CPAP failure criteria for intubation (AIIMS): FiO₂ > 40% on optimal CPAP, PCO₂ > 60 mmHg, pH < 7.20, apnea requiring PPV, severe WOB',
+          'Surfactant via InSurE preferred for RDS if FiO₂ > 40% on CPAP (poractant alfa/beractant per AIIMS surfactant protocol)',
+          'CXR and blood gas before and after escalation; document settings and response at 1 hour',
+          'Target SpO₂ 91–95% on all support levels; alarm limits 88–95% (AIIMS O₂ policy)',
+          'If downgrading (weaning): RDS — wean VT first (> 4 ml/kg), then PIP, then PEEP (not below 5), then Rate (SIMV ≥ 15–20)',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.55 — Surfactant Therapy. | 2. IAP-NRP 2022.'
+  },
+
+  // ─── TEMPERATURE ──────────────────────────────────────
+  // Sources: AIIMS Thermal Management Ch.5 (AIIMS Protocols 2019)
+  {
+    id: 'hyperthermia', name: 'Hyperthermia / Fever', icon: '🌡️',
+    category: 'Temperature', severity: 'high',
+    triggerParam: 'Temp',
+    thresholds: [
+      {
+        label: 'Axillary temp > 37.5°C (AIIMS definition of hyperthermia)',
+        autoTrigger: v => v > 37.5,
+        timerSec: 3600, timerLabel: 'Recheck temperature in 1 hour post-intervention',
+        codeBlue: false,
+        nurseActions: [
+          'Remove excess blankets/clothing',
+          'Adjust warmer setpoint to 36.5–37°C',
+          'Recheck temp in 15 min',
+          'Check for infection signs: RR, HR, tone, feeding tolerance',
+          'Notify Neonatologist if temp > 38°C or persists after environmental correction'
+        ],
+        physicianActions: [
+          'Environmental hyperthermia: cool environment; temperature should normalise within 30 min',
+          'If fever (temp persists despite environmental correction): sepsis is most common cause in term neonates (AIIMS Ch.5)',
+          'Full sepsis evaluation: CBC, CRP, blood culture (before antibiotics), urine culture, CSF if meningitis suspected',
+          'Start antibiotics per AIIMS late-onset sepsis protocol (Table 24.3) if strong clinical suspicion',
+          'Antipyretic: paracetamol 10–15 mg/kg PO/IV — use only if true fever with discomfort; avoid in very preterm',
+          'Monitor temperature every 30–60 min until normalised',
+          'Review all IV line sites for local infection (phlebitis, catheter-site infection)',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.5 — Thermal Management. | 2. WHO Thermal Protection of the Newborn 1997.'
+  },
+
+  {
+    id: 'hypothermia', name: 'Hypothermia', icon: '❄️',
+    category: 'Temperature', severity: 'high',
+    triggerParam: 'Temp',
+    thresholds: [
+      {
+        label: 'Mild/Cold stress: Temp 36.0–36.4°C',
+        autoTrigger: v => v < 36.5 && v >= 36,
+        timerSec: 1800, timerLabel: 'Monitor temperature every 30 min during rewarming',
+        codeBlue: false,
+        nurseActions: [
+          'Place under radiant warmer; increase servo setpoint',
+          'Wrap in pre-warmed blanket; cover head with hat',
+          'Rewarm at 0.5°C/hr — NOT rapid rewarming',
+          'Check RBS — hypoglycaemia common with hypothermia',
+          'Record temp every 30 min until 36.5°C × 2 readings, then hourly × 4',
+          'Notify Neonatologist'
+        ],
+        physicianActions: [
+          'Rewarm at 0.5°C per hour — avoid rapid rewarming (causes metabolic instability and haemorrhage)',
+          'Check RBS urgently — hypothermia causes hypoglycaemia; treat if RBS < 40 mg/dL',
+          'CBC, CRP — hypothermia is a common presentation of late-onset sepsis in NICU (AIIMS)',
+          'Sepsis workup if no clear environmental cause',
+          'NS 10 ml/kg if haemodynamic compromise',
+          'Document temperature every 30 min until 36.5°C × 2 readings, then hourly × 4 hours (AIIMS algorithm)',
+        ]
+      },
+      {
+        label: 'Moderate hypothermia: Temp 32–35.9°C',
+        autoTrigger: v => v < 36 && v >= 32,
+        timerSec: 1800, timerLabel: 'Monitor temperature every 30 min during rewarming',
+        codeBlue: false,
+        nurseActions: [
+          'Place under radiant warmer immediately',
+          'Warm IV fluids (if available); warm humidified O₂',
+          'Rewarm at 0.5°C/hr — NEVER > 1°C/hr',
+          'Check RBS urgently; treat if < 40 mg/dL',
+          'Monitor HR and BP — cold stress causes bradycardia and hypotension',
+          'NOTIFY NEONATOLOGIST: temp, HR, BP, RBS',
+          'Document temp every 15 min during active rewarming'
+        ],
+        physicianActions: [
+          'Active rewarming at 0.5–1°C/hour under close monitoring',
+          'IV dextrose if RBS < 40 mg/dL: 10% Dextrose 2 ml/kg bolus + continuous infusion at 6–8 mg/kg/min',
+          'Full sepsis workup and empirical antibiotics (sepsis is common precipitant)',
+          'NS bolus 10 ml/kg if haemodynamic compromise; repeat if needed',
+          'Severe/prolonged hypothermia can cause: hypoxia, metabolic acidosis, coagulation failure, pulmonary hypertension (AIIMS)',
+          'Document temperature every 30 min until normalised; consider ICU-level monitoring',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.5 — Thermal Management. | 2. WHO Thermal Protection of the Newborn 1997.'
+  },
+
+  // ─── NEUROLOGICAL ─────────────────────────────────────
+  // Sources: IAP STG Neonatal Seizure 2022 (Ch.2 in merged PDF, p.138–141)
+  {
+    id: 'seizures', name: 'Seizures', icon: '⚡',
+    category: 'Neurological', severity: 'critical',
+    thresholds: [
+      {
+        label: 'Clinical seizure — repetitive/stereotyped movements or electrographic seizure',
+        autoTrigger: null,
+        timerSec: 180, timerLabel: 'Neonatologist must be alerted within 3 min',
+        codeBlue: false,
+        nurseActions: [
+          'Note time onset; observe and document seizure characteristics',
+          'Position on side — protect airway, do not restrain',
+          'Check SpO₂ — apply O₂ if SpO₂ < 90%',
+          'Check RBS STAT — treat if < 40 mg/dL (D10% 2 ml/kg IV)',
+          'Check iCa if RBS normal — Ca gluconate 2 ml/kg 1:1 diluted if low',
+          'NOTIFY NEONATOLOGIST — prepare phenobarbitone 20 mg/kg IV',
+          'Ensure IV access; document duration and any response to treatment'
+        ],
+        physicianActions: [
+          'IAP Seizure Flowchart 1 (2022): Airway-Breathing-Circulation (TABC) first',
+          'CORRECT METABOLIC CAUSES IMMEDIATELY BEFORE ANTICONVULSANTS:',
+          'Hypoglycaemia (RBS < 40 mg/dL): 10% Dextrose 2 ml/kg IV bolus → continuous infusion 6–8 mg/kg/min',
+          'Hypocalcaemia (symptomatic/iCa < 0.75 mmol/L): Calcium gluconate 2 ml/kg of 10% diluted 1:1 in D5W over 10 min with cardiac monitoring',
+          'Hyponatraemia (Na < 130): 3% NaCl correction per protocol',
+          'After metabolic correction, if seizure persists: Phenobarbitone 20 mg/kg IV over 30 min (first-line antiseizure medication per IAP 2022)',
+          'If seizure continues: additional phenobarbitone 10 mg/kg × 2 doses (max cumulative 40 mg/kg)',
+          'Second-line: Phenytoin 20 mg/kg IV at 1 mg/kg/min OR Levetiracetam 40–60 mg/kg IV over 15 min',
+          'Send: RBS, Na, K, iCa, Mg, ammonia, blood gas; LP if no contraindication and meningitis suspected',
+          'EEG/aEEG monitoring if available; MRI brain once clinically stable',
+          'Wean anticonvulsants if seizure-free 48–72 hr before discharge (IAP 2022 Flowchart 2)',
+        ]
+      }
+    ],
+    refs: '1. IAP STG 2022: Neonatal Seizures. | 2. AIIMS Protocols: Neonatology 2019. | 3. Painter MJ, et al. Phenobarbital compared with phenytoin. NEJM 1999.'
+  },
+
+  // ─── METABOLIC ────────────────────────────────────────
+  // Sources: AIIMS Hypoglycemia Ch.28, AIIMS Hypocalcemia Ch.28 (Protocols 2019)
+  {
+    id: 'hypoglycemia', name: 'Hypoglycemia', icon: '🍬',
+    category: 'Metabolic', severity: 'high',
+    triggerParam: 'RBS',
+    thresholds: [
+      {
+        label: 'RBS 25–45 mg/dL — Asymptomatic (operational threshold < 40 mg/dL whole blood / < 45 mg/dL plasma)',
+        autoTrigger: v => v < 45 && v >= 25,
+        timerSec: 900, timerLabel: 'Recheck RBS in 15–30 min post-intervention',
+        codeBlue: false,
+        nurseActions: [
+          'Breastfeed or buccal dextrose gel 200 mg/kg (0.5 ml/kg of 40% gel)',
+          'Recheck RBS in 15–30 min',
+          'If on IV: increase GIR by 2 mg/kg/min (notify physician)',
+          'Monitor for symptoms: tremors, jitteriness, poor tone, apnea',
+          'Notify Neonatologist if RBS < 45 on recheck'
+        ],
+        physicianActions: [
+          'AIIMS definition: operational threshold for intervention = whole blood glucose < 40 mg/dL (plasma < 45 mg/dL)',
+          'Asymptomatic: encourage breastfeeding; increase GIR if on IV by 1–2 mg/kg/min; recheck in 15–30 min',
+          'Review current GIR formula: % dextrose × rate (ml/hr) ÷ (weight × 6)',
+          'Maximum 12.5% dextrose via peripheral IV; higher concentrations require central access',
+          'Identify at-risk category: IUGR, LGA, IDM, asphyxia, sepsis, polycythaemia, SGA (Table 28.1)',
+          'Monitoring schedule (Table 28.2): at-risk infants at 2, 6, 12, 24, 48, 72 hr; sick neonates every 6–8 hr',
+          'Target: 2 consecutive RBS > 50 mg/dL before considering stopping monitoring/tapering IV',
+        ]
+      },
+      {
+        label: 'RBS < 25 mg/dL OR ANY symptomatic hypoglycaemia (jitteriness, seizures, apnea, poor tone, tremors)',
+        autoTrigger: v => v < 25,
+        timerSec: 300, timerLabel: 'IV treatment must be given within 5 min',
+        codeBlue: false,
+        nurseActions: [
+          'IV bolus: D10% 2 ml/kg over 2–3 min — IMMEDIATELY',
+          'Start/increase glucose infusion at 6–8 mg/kg/min',
+          'Recheck RBS in 15 min',
+          'Monitor: tone, activity, seizures, SpO₂',
+          'NOTIFY NEONATOLOGIST',
+          'Do NOT stop glucose infusion abruptly — rebound hypoglycaemia',
+          'Document: RBS readings, time, treatment, response'
+        ],
+        physicianActions: [
+          'IV mini-bolus (AIIMS Ch.28): 10% Dextrose 2 ml/kg (= 200 mg/kg) IV over 2–3 min — prescribe exact dose',
+          'Follow IMMEDIATELY with continuous glucose infusion at 6–8 mg/kg/min',
+          'If RBS < 50 mg/dL at recheck: increase GIR by 2 mg/kg/min every 15–30 min to maximum 12 mg/kg/min',
+          'Avoid > 12.5% dextrose via peripheral line (thrombophlebitis risk); use central if > 12.5% needed',
+          'Tapering IV: once 2+ consecutive RBS > 50 mg/dL, decrease GIR by 2 mg/kg/min every 6 hr with feeds increasing',
+          'Do NOT stop glucose infusion abruptly — severe rebound hypoglycaemia will occur',
+          'If persistent/resistant (fails to maintain RBS on GIR > 12 mg/kg/min): suspect hyperinsulinism — send critical sample (insulin, cortisol, IGF-BP3, FFA, BOHB) at time of hypoglycaemia',
+          'Glucagon IM (0.2 mg/kg) only as temporary measure if no IV access (not for SGA infants — AIIMS)',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.28 — Hypoglycemia. | 2. Thornton PS, et al. Pediatrics 2015;135:e1141.'
+  },
+
+  {
+    id: 'electrolytes', name: 'Electrolyte Abnormality', icon: '⚗️',
+    category: 'Metabolic', severity: 'high',
+    thresholds: [
+      {
+        label: 'Hyponatraemia Na < 130 or Hypernatraemia Na > 150 mEq/L',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Confirm Na level — repeat if lab value unexpected',
+          'Assess fluid balance: daily weights, input/output',
+          'Notify Neonatologist with Na value and fluid balance data',
+          'Prepare 3% NaCl for physician order if Na < 120',
+          'Monitor for seizures if Na < 125',
+          'Do NOT correct rapidly — risk of central pontine myelinolysis'
+        ],
+        physicianActions: [
+          'Hyponatraemia Na < 130: determine type — dilutional (excess free water, SIADH) vs depletional (diuretics, renal loss)',
+          'Symptomatic or Na < 120: slow correction with 3% NaCl; target Na rise ≤ 10 mEq/L/day maximum',
+          'Hypernatraemia Na > 150: assess free water deficit; correct slowly — Na fall ≤ 10 mEq/L/day',
+          'Severe rapid hypernatraemia correction causes cerebral oedema — do not correct faster than 0.5 mEq/L/hr',
+          'Review IVF prescription: sodium content, insensible water loss, VLBW infants require more water',
+          'Repeat electrolytes 6-hourly until normalised',
+        ]
+      },
+      {
+        label: 'Hypokalaemia K < 3.0 or Hyperkalaemia K > 6.5 mEq/L',
+        autoTrigger: null,
+        timerSec: 600, timerLabel: 'ECG urgently for K > 6.5 mEq/L',
+        codeBlue: false,
+        nurseActions: [
+          'Obtain urgent 12-lead ECG — peaked T waves, wide QRS = emergency',
+          'NOTIFY NEONATOLOGIST IMMEDIATELY if K > 6.5',
+          'Stop all K-containing fluids/feeds',
+          'Prepare calcium gluconate 10% 1 ml/kg for physician order (cardiac protection)',
+          'Prepare insulin + glucose, salbutamol nebulisation for physician order',
+          'Continuous cardiac monitoring'
+        ],
+        physicianActions: [
+          'Hypokalaemia K < 3: slow KCl infusion (AIIMS protocol); central line preferred for K > 40 mEq/L concentration',
+          'Hyperkalaemia K > 6.5 or ECG changes:',
+          '1) Cardiac membrane stabilisation: Calcium gluconate 10% — 2 ml/kg IV over 5–10 min with ECG monitoring',
+          '2) Shift K intracellularly: Insulin-glucose (0.1 units/kg insulin + 2 ml/kg 10% Dextrose) + Sodium bicarbonate (1–2 mEq/kg)',
+          '3) Eliminate K: loop diuretics if renal function intact; resonium for chronic management',
+          'Identify cause: renal failure, haemolysis, adrenal insufficiency, excessive K in TPN',
+          'Repeat K every 2–4 hours until stable; remove K from all IVF',
+        ]
+      },
+      {
+        label: 'Hypocalcaemia — iCa < 1.0 mmol/L (preterm) or < 1.2 mmol/L (term) or total Ca < 7 mg/dL',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Confirm iCa — repeat venous sample if capillary value',
+          'Apply cardiac monitor before Ca infusion',
+          'Prepare Ca gluconate 10% — dilute 1:1 in D5W (2 ml/kg dose)',
+          'Ensure IV patent — check site q2h for extravasation (causes tissue necrosis)',
+          'Give Ca infusion SLOWLY over 10–30 min; STOP if bradycardia',
+          'NOTIFY NEONATOLOGIST before giving',
+          'Never give Ca via UAC'
+        ],
+        physicianActions: [
+          'AIIMS Hypocalcemia definitions: preterm iCa < 1.0 mmol/L (4 mg/dL); term iCa < 1.2 mmol/L (4.8 mg/dL)',
+          'Symptomatic or iCa < 0.75: bolus 10% Calcium gluconate 2 ml/kg diluted 1:1 in D5W IV over 10 min under cardiac monitoring',
+          'Bolus followed by continuous infusion: 80 mg/kg/day elemental Ca × 48 hr, taper to 50% × 24 hr, then stop',
+          'Asymptomatic hypocalcaemia: continuous infusion 80 mg/kg/day × 48 hr (no bolus needed)',
+          'If bradycardia occurs during infusion: SLOW RATE IMMEDIATELY or pause',
+          'If unresponsive to calcium: check Mg — hypomagnesaemia causes refractory hypocalcaemia',
+          'Hypomagnesaemia: MgSO₄ 50% — 0.2 ml/kg IM × 2 doses 12 hr apart; then 0.2 ml/kg/day PO × 3 days (AIIMS)',
+          'Persistent hypocalcaemia: send serum phosphate, Mg, PTH, 25-OH Vitamin D, ALP',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.28 — Hypocalcemia. | 2. AIIMS Protocols: Hyponatremia/Hyperkalemia sections. | 3. Kliegman RM, et al. Nelson Textbook of Pediatrics, 21st ed.'
+  },
+
+  // ─── GI ───────────────────────────────────────────────
+  // Sources: AIIMS NEC Ch.23 (Protocols 2019)
+  {
+    id: 'nec', name: 'NEC Suspicion', icon: '🔴',
+    category: 'GI', severity: 'critical',
+    thresholds: [
+      {
+        label: 'NEC suspicion — distension + bilious/bloody aspirate/haemodynamic instability (Bell Stage I–IIIB)',
+        autoTrigger: null,
+        timerSec: 300, timerLabel: 'Neonatologist must be alerted within 5 min',
+        codeBlue: false,
+        nurseActions: [
+          'STOP all feeds immediately — NPO',
+          'Insert orogastric tube — aspirate and decompress stomach',
+          'Replace aspirates volume-for-volume with N/2 saline IV',
+          'Accurate abdominal girth every 4–6 hr; mark with pen',
+          'Notify Neonatologist; prepare for blood/urine/CRP sampling',
+          'Remove UAC/UVC per physician order (AIIMS recommendation)',
+          'Strict input/output; weigh nappies'
+        ],
+        physicianActions: [
+          'Bell staging (AIIMS Ch.23): Stage I = increased residuals, mild distension, blood in stool; Stage IIA = pneumatosis intestinalis on X-ray; Stage IIB = portal venous gas ± ascites; Stage IIIA = shock, DIC, peritonitis; Stage IIIB = pneumoperitoneum',
+          'NPO + continuous OGT decompression with volume-for-volume N/2 saline replacement',
+          'IV fluids: NS bolus 10–20 ml/kg if haemodynamically unstable; maintain euvolaemia',
+          'Remove all umbilical catheters (UAC/UVC) — AIIMS absolute recommendation',
+          'Abdominal X-ray (AP supine + left lateral decubitus): look for pneumatosis intestinalis, portal venous gas, free air',
+          'Blood culture + CBC + CRP + coagulation + group and hold',
+          'Antibiotics: broad-spectrum with anaerobic cover — piperacillin-tazobactam + amikacin for peritonitis/perforation (AIIMS)',
+          'Inotropes (dopamine/dobutamine) for circulatory support; correct acidosis and electrolytes',
+          'PRP/FFP if DIC; maintain haematocrit; monitor urine output and renal function',
+          'PAEDIATRIC SURGERY consultation for Stage ≥ IIB, free air (Stage IIIB), or deteriorating medically',
+          'Serial X-rays every 6–8 hours; abdominal girth monitoring every 4–6 hours',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.23 — NEC. | 2. Bell MJ. Neonatal NEC. NEJM 1978 (Bell staging). | 3. Neu J, Walker WA. NEC. NEJM 2011.'
+  },
+
+  {
+    id: 'feed_intol', name: 'Feeding Intolerance', icon: '🍼',
+    category: 'GI', severity: 'moderate',
+    thresholds: [
+      {
+        label: 'High gastric residual > 50% of previous feed volume, or vomiting, or distension — no signs of NEC',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Aspirate NG tube — note volume, colour, consistency',
+          'If aspirate > 50% of previous feed: withhold feed, notify physician',
+          'Measure abdominal girth; note distension or discolouration',
+          'Check last stool — bloody or absent?',
+          'Notify Neonatologist; await feed modification order'
+        ],
+        physicianActions: [
+          'Bilious aspirate: rule out NEC urgently (AXR), surgical obstruction before resuming feeds',
+          'Non-bilious: review recent feed volume increase — was advancement faster than 20–25 ml/kg/day?',
+          'Consider reducing feed volume, slower advancement, or feed hold for 12–24 hr',
+          'Assess for underlying causes: ileus from electrolytes, sepsis, post-operative state',
+          'Probiotics per unit NEC prevention protocol (Lactobacillus species — AIIMS unit-specific)',
+          'Do not restart feeds until cause is established and bilious aspirates excluded',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019. | 2. Ziegler EE. Feeding the premature infant. Nestle Nutr Workshop 2011.'
+  },
+
+  // ─── LINES ────────────────────────────────────────────
+  // Sources: AIIMS NEC Ch.23 (UAC/UVC removal), AIIMS Protocols general
+  {
+    id: 'lines', name: 'Line / Access Issue', icon: '💉',
+    category: 'Lines', severity: 'moderate',
+    thresholds: [
+      {
+        label: 'Blocked / displaced / infiltrated peripheral IV',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Inspect site — redness, swelling, blanching, pain on flush',
+          'If infiltrated: remove cannula, elevate limb, apply warm compress',
+          'Flush gently with NS 0.5–1 ml — STOP if resistance or swelling',
+          'Document condition; notify Neonatologist for re-siting',
+          'Ensure alternative IV access before removing if critical infusions running'
+        ],
+        physicianActions: [
+          'Vesicant infiltration: hyaluronidase infiltration at site (per AIIMS protocol) within 1 hour',
+          'Plan new IV access: peripheral re-site, PICC or UVC if central access needed',
+          'Review necessity of each infusion — consolidate where possible',
+          'Tissue injury from calcium/TPN infiltration: plastic surgery / dermatology review if severe',
+          'Document incident, treatment, and site appearance',
+        ]
+      },
+      {
+        label: 'UAC / UVC — blocked, displaced, or malpositioned',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Check line position on last X-ray — confirm still in situ',
+          'Inspect insertion site: bleeding, redness, oozing',
+          'Check all connections are secure and stopcock positions correct',
+          'Do NOT flush UAC if resistance felt',
+          'NOTIFY NEONATOLOGIST immediately for any line concern',
+          'Document: appearance, length at skin, any alarms'
+        ],
+        physicianActions: [
+          'Abdominal X-ray to verify tip position (UAC: T6–T9 or L3–L4; UVC: at IVC-RA junction)',
+          'Malpositioned line: reposition or replace under strict asepsis',
+          'Signs of catheter-associated infection: remove and send tip for culture; start antibiotics',
+          'Plan alternative access if UAC/UVC must be removed',
+          'Complete incident documentation for any displacement event',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019. | 2. O\'Grady NP, et al. Guidelines for prevention of intravascular catheter-related infections. MMWR 2011.'
+  },
+
+  // ─── HAEMATOLOGY ──────────────────────────────────────
+  // Sources: AIIMS Polycythemia Ch.33 (AIIMS Protocols 2019), AIIMS Jaundice Ch.20 (AIIMS Protocols 2019)
+  {
+    id: 'polycythemia', name: 'Polycythemia', icon: '🔴',
+    category: 'Haematology', severity: 'high',
+    thresholds: [
+      {
+        label: 'Venous Hct ≥ 65% — Polycythemia confirmed',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Confirm Hct by venous sample — capillary values unreliable',
+          'Weigh baby — exclude dehydration (wt loss > 10–15%)',
+          'Assess symptoms: plethora, jitteriness, poor feeding, respiratory distress',
+          'Notify Neonatologist with venous Hct and weight',
+          'If PET ordered: prepare NS for partial exchange (20 ml/kg), peripheral IV access',
+          'Increase monitoring during PET: HR, SpO₂, BP every 15 min'
+        ],
+        physicianActions: [
+          'AIIMS algorithm (Fig 33.1): Exclude dehydration first — correct if present, recheck Hct',
+          'Symptomatic + Hct ≥ 65%: Partial Exchange Transfusion (PET) indicated',
+          'Asymptomatic + Hct ≥ 75%: PET indicated',
+          'Asymptomatic + Hct 70–74%: additional IV/enteral fluid 20 ml/kg/day; monitor for symptoms',
+          'Asymptomatic + Hct 65–69%: monitor only; recheck Hct — treat based on repeat value and symptom development',
+          'PET volume formula: Blood vol × (observed Hct − desired Hct) / observed Hct (target Hct = 55%)',
+          'Rule of thumb: exchange volume ≈ 20 ml/kg',
+          'Blood volumes: term 80–90 ml/kg; preterm 90–100 ml/kg',
+          'Exchange fluid: Normal Saline (AIIMS preference over colloid — comparable Hct reduction, no infection risk)',
+          'Route: peripheral arterial withdrawal + peripheral venous replacement preferred (lower infection risk vs umbilical route)',
+          'Post-PET: monitor glucose, Ca, haematocrit; check for NEC — PET increases NEC risk (Cochrane evidence)',
+          'Send: Hct confirmation, RBS, Ca, electrolytes, bilirubin (polycythemia + jaundice common)',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.33 — Polycythemia. | 2. Deorari AK, et al. Management of polycythemia. Indian J Pediatr 2018. | 3. Cochrane Review: PET in polycythemia-hyperviscosity syndrome.'
+  },
+
+  {
+    id: 'jaundice', name: 'Jaundice / Hyperbilirubinaemia', icon: '🟡',
+    category: 'Haematology', severity: 'high',
+    thresholds: [
+      {
+        label: 'TSB rising or approaching phototherapy threshold — pathological features',
+        autoTrigger: null,
+        timerSec: null, timerLabel: null,
+        codeBlue: false,
+        nurseActions: [
+          'Ensure maximum skin exposure under phototherapy (nappy only)',
+          'Check LED/CFL unit distance: 30–45 cm from skin',
+          'Cover eyes with opaque shield — ensure no slip',
+          'Check temp every 2–4 hr (PT increases insensible loss)',
+          'Increase fluid intake by 10–20 ml/kg/day while under PT',
+          'Recheck TSB in 4–6 hr — effective PT = TSB falls ≥ 2 mg/dL',
+          'Notify Neonatologist if TSB rising despite PT'
+        ],
+        physicianActions: [
+          'AIIMS protocol: follow AAP 2022 nomogram thresholds (separate charts for ≥35 wk with/without neurotoxicity risk factors); NICE guidelines for < 35 wk gestation',
+          'Neurotoxicity risk factors: GA < 38 wk, albumin < 3 g/dL, sepsis, isoimmune haemolytic disease, significant instability in last 24 hr',
+          'Effective PT: LED or CFL at ≥ 30 μW/cm²/nm, wavelength 460–490 nm; maximize body surface area; keep unit as close as possible',
+          'PT efficacy: TSB should fall ≥ 2 mg/dL within 4–6 hr; if not falling or rising = ongoing haemolysis',
+          'Escalation threshold: TSB 2 mg/dL below exchange level → intensive PT + IV hydration; consider IVIG 0.5–1 g/kg for isoimmune haemolytic disease (Rh/ABO)',
+          'Exchange Transfusion (DVET) indications: acute bilirubin encephalopathy (any TSB); TSB ≥ exchange threshold; Rh isoimmunization with cord Hb ≤ 10 g/dL or cord bilirubin ≥ 5 mg/dL',
+          'DVET technique: pull-push via umbilical venous catheter; volume = 160–180 ml/kg (2× blood volume); aliquots ≤ 10% blood volume (max 20 ml per aliquot)',
+          'DVET blood: Rh isoimmunization = Rh-negative O group in AB plasma; ABO incompatibility = O group in AB plasma',
+          'PT stop: when TSB falls ≥ 2 mg/dL below PT threshold; check rebound TSB ≥ 12–24 hr after stopping',
+          'Investigations: blood group (mother + baby), DCT, peripheral smear, G6PD levels; bilirubin fractionation if cholestasis suspected',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019, Ch.20 — Neonatal Jaundice. | 2. AAP 2022 Hyperbilirubinemia Guidelines (≥35 wks). | 3. NICE CG98: Neonatal Jaundice 2010. | 4. Bhutani VK, et al. Nomogram for identification of risk. Pediatrics 1999.'
+  },
+
+  // ─── GENERAL ──────────────────────────────────────────
+  {
+    id: 'deterioration', name: 'Sudden Deterioration', icon: '🚨',
+    category: 'General', severity: 'critical',
+    thresholds: [
+      {
+        label: 'Acute unexplained clinical deterioration',
+        autoTrigger: null,
+        timerSec: 120, timerLabel: 'Neonatologist must attend within 5 min',
+        codeBlue: false,
+        nurseActions: [
+          'Call Neonatologist to bedside STAT',
+          'Check ABCDE: Airway, Breathing, Circulation, Disability (tone/seizure), Exposure',
+          'Apply 100% O₂ via appropriate device',
+          'Check SpO₂, HR, BP, temp, RBS simultaneously',
+          'Ensure IV access patent — draw bloods: FBC, CRP, culture, RBS, ABG',
+          'Do not leave baby unattended',
+          'Document: time of deterioration, all observations, all interventions'
+        ],
+        physicianActions: [
+          'Attend bedside within 5 minutes — use SBAR for handover',
+          'Systematic assessment: Respiratory (ETT/CPAP), Cardiac (rate, rhythm, perfusion), Metabolic (RBS, gases)',
+          'Send: blood gas, RBS, CBC, CRP, lactate, electrolytes, blood culture',
+          'Think STOP: Sepsis, Tension pneumothorax, Other metabolic causes, Pump (cardiac) failure',
+          'Portable CXR',
+          'Notify senior Neonatologist / Consultant if cause unclear',
+          'Consider PICU/surgical review if surgical cause possible',
+        ]
+      }
+    ],
+    refs: '1. AIIMS Protocols: Neonatology 2019. | 2. IAP-NRP 2022. | 3. NNF Shock CPG 2023.'
+  },
+
+  // ─── RESUSCITATION ─────────────────────────────────────────────
+  // Source: NRP 9th Edition Algorithm — AAP / AHA 2025
+  {
+    id: 'nrp_resus', name: 'Neonatal Resuscitation (NRP 9th Ed)', icon: '🫀',
+    category: 'Resuscitation', severity: 'critical',
+    triggerParam: 'HR',
+    thresholds: [
+      {
+        label: '⬛ Step 1 — Birth Assessment (0–60 sec)',
+        autoTrigger: null,
+        timerSec: 60, timerLabel: 'Golden Minute — complete initial assessment by 60 seconds',
+        codeBlue: false,
+        nurseActions: [
+          '✅ PRE-BIRTH: Complete antenatal counselling · Team briefing · Equipment check',
+          '🏥 BIRTH: Initiate cord management plan (delayed cord clamping if appropriate)',
+          '❓ ASSESS — answer ALL three: Term gestation? Good tone? Breathing or crying?',
+          '→ If ALL YES → BABY RECOVERED / ROUTINE CARE: Skin-to-skin with parent · Routine observations · Maintain normal temperature · Ongoing evaluation — select "✅ Recovery: Routine Care" tab',
+          '→ If ANY NO: Move to radiant warmer — begin Initial Steps below',
+          '🌡 INITIAL STEPS: Warm · Dry · Position (sniffing) · Stimulate · Clear airway if secretions present',
+          '📟 Apply pulse oximeter (RIGHT hand — pre-ductal) + cardiac monitor',
+          'Target SpO₂: 2 min 65–70% | 3 min 70–75% | 4 min 75–80% | 5 min 80–85% | 10 min 85–95%',
+          '→ After Initial Steps: reassess — breathing well + HR ≥ 100? → "✅ Recovery: Routine Care" tab',
+          '→ Apnea / gasping / HR < 100? → Select "Step 2 — PPV" tab',
+        ],
+        physicianActions: [
+          'Assign team roles BEFORE delivery (Leader, Airway, Compressions, Medications, Recorder)',
+          'If term + good tone + breathing/crying → Routine care — no resuscitation needed',
+          'If any criterion absent → radiant warmer, initial steps, reassess at 30–60 sec',
+          'RECOVERY PATHWAY — if HR ≥ 100 and breathing after initial steps: proceed to post-resuscitation observations',
+          'Document Apgar scores (1 min, 5 min, 10 min if needed)',
+          'Communicate delivery events to NICU team: GA, liquor colour, cord status, maternal meds',
+        ]
+      },
+      {
+        label: '⬛ Step 2 — Apnea / HR <100 → Start PPV',
+        autoTrigger: v => v < 100,
+        timerSec: 30, timerLabel: 'Reassess HR after 30 sec of PPV',
+        codeBlue: false,
+        nurseActions: [
+          '❓ Apnea or gasping? OR HR < 100/min? → YES → PPV NOW',
+          '→ NO but labored breathing / persistent cyanosis → SpO₂ probe · O₂ · Consider CPAP — may recover without PPV',
+          '🫁 PPV: Bag-mask · FiO₂ 21% (term) or 21–30% (preterm <35 wks) · Rate 40–60/min · PIP 20–25 cmH₂O',
+          'Ensure visible chest rise + good mask seal with each breath',
+          '📟 Cardiac monitor on — pulse oximeter right wrist',
+          'After 30 sec PPV — REASSESS HR:',
+          '✅ HR ≥ 100 + improving breathing → BABY RECOVERING — select "✅ Recovery: Post-PPV Care" tab',
+          '⚠ HR < 100 still → Select "Step 3 — Corrective Steps" tab',
+          'Keep record of PPV start time and FiO₂ used',
+        ],
+        physicianActions: [
+          'Confirm PPV effective: symmetric chest rise, HR trending up, SpO₂ improving',
+          'Titrate FiO₂ to target SpO₂ per NRP table — avoid hyperoxia',
+          '✅ RECOVERY: If HR ≥ 100 + spontaneous breathing after PPV → wean to CPAP/O₂ → post-resuscitation care',
+          '⚠ HR < 100 after 30 sec effective PPV → proceed to Step 3 corrective steps',
+          'If laboured breathing only (no apnea, HR ≥ 100) → CPAP 5–6 cmH₂O + titrate O₂ → monitor',
+        ]
+      },
+      {
+        label: '⬛ Step 3 — HR <100 after PPV → MR SOPA Corrective Steps',
+        autoTrigger: v => v < 100,
+        timerSec: 30, timerLabel: '30 sec of corrective PPV — then reassess HR',
+        codeBlue: false,
+        nurseActions: [
+          '❓ HR still < 100 after 30 sec PPV? → Ventilation corrective steps (MR SOPA):',
+          '  M — Mask: reapply, ensure airtight seal, no leak',
+          '  R — Reposition: sniffing position, neutral neck',
+          '  S — Suction: mouth then nose to clear secretions',
+          '  O — Open mouth: jaw thrust if posterior airway obstruction',
+          '  P — Pressure: increase PIP by 5–10 cmH₂O if no chest rise',
+          '  A — Airway alternative: prepare intubation equipment or laryngeal mask',
+          '🫀 Cardiac monitor mandatory for accurate HR assessment',
+          'After corrective PPV — REASSESS HR:',
+          '✅ HR ≥ 100 + breathing → BABY RECOVERING — select "✅ Recovery: Post-PPV Care" tab',
+          '⚠ HR < 60 → Select "Step 4 — Compressions" tab immediately',
+          'Prepare intubation kit: ETT (size/depth below) · stylet · laryngoscope · colorimetric CO₂ detector',
+        ],
+        physicianActions: [
+          'After MR SOPA if HR still < 100 → INTUBATE or insert laryngeal mask airway',
+          'ETT size: <1000g → 2.5mm | 1000–2000g → 3.0mm | 2000–3000g → 3.0–3.5mm | >3000g → 3.5mm',
+          'ETT lip depth: weight(kg) + 6 cm (1kg→7cm | 2kg→8cm | 3kg→9cm | 4kg→10cm)',
+          'Confirm placement: colorimetric CO₂ detector turns yellow · equal breath sounds · no gastric sounds · CXR tip at T2',
+          '✅ RECOVERY: If HR ≥ 100 after intubation + corrective ventilation → wean FiO₂, continue PPV/CPAP, move to post-resus care',
+          '⚠ HR < 60 after intubation + effective ventilation → Step 4 compressions',
+        ]
+      },
+      {
+        label: '🔴 Step 4 — HR <60 → Chest Compressions + 100% O₂',
+        autoTrigger: v => v < 60,
+        timerSec: 60, timerLabel: '60 sec CPR + PPV — then reassess HR',
+        codeBlue: true,
+        nurseActions: [
+          '🚨 HR < 60 despite effective PPV → CODE BLUE — call entire team NOW',
+          '🫀 COMPRESSIONS — 2-thumb encircling technique (preferred over 2-finger):',
+          '  · Thumbs: lower ⅓ sternum, just below inter-nipple line',
+          '  · Depth: ⅓ AP diameter · Do not lift thumbs between compressions',
+          '  · Rhythm: 3 compressions + 1 breath = "1-and-2-and-3-and-BREATHE" (120 events/min)',
+          '  · No simultaneous compression + ventilation',
+          '🫁 FiO₂ → 100% IMMEDIATELY when starting compressions',
+          '💉 Prepare UVC/IO access for epinephrine (physician will insert)',
+          '💉 Draw up Epinephrine 1:10,000 — dose 0.1–0.3 ml/kg IV/IO',
+          '⏱ Reassess HR after every 60 seconds — announce to team leader clearly',
+          '✅ HR rises ≥ 60 → CALL OUT to team · STOP compressions · Continue PPV · Wean O₂ · Select "✅ Recovery: Post-Compression Care" tab',
+          '⚠ HR remains < 60 → Select "Step 5 — Epinephrine" tab',
+          'Document: time compressions started · compressor name · HR at each 60-sec check',
+        ],
+        physicianActions: [
+          'Ensure intubation + effective ventilation confirmed BEFORE compressions',
+          'Coordinate team: assign compressor, ventilator, medication, recorder roles',
+          'Establish UVC (preferred) or IO access — do not delay compressions for access',
+          '✅ RECOVERY — HR ≥ 60 after compressions:',
+          '  · Stop compressions immediately',
+          '  · Continue PPV — gradually wean FiO₂ back toward 21%',
+          '  · If HR ≥ 100 + spontaneous breathing → CPAP/O₂, transfer to NICU',
+          '  · Check RBS, blood gas, electrolytes, blood culture',
+          '  · Consider HIE assessment → therapeutic hypothermia if ≥36 wks',
+          '⚠ HR < 60 after 60 sec CPR → proceed to Step 5 — Epinephrine now',
+        ]
+      },
+      {
+        label: '🚨 Step 5 — HR <60 persists → Epinephrine + Reversible Causes',
+        autoTrigger: v => v < 60,
+        timerSec: 180, timerLabel: 'Repeat epinephrine every 3–5 min if HR < 60',
+        codeBlue: true,
+        nurseActions: [
+          '🚨 HR STILL < 60 → EPINEPHRINE NOW',
+          '💉 IV/IO Epinephrine 1:10,000: 0.1–0.3 ml/kg rapid bolus (= 0.01–0.03 mg/kg)',
+          '💉 ETT route (only if no IV/IO): 0.5–1.0 ml/kg of 1:10,000 + 1 ml NS flush — less reliable',
+          '🔁 Repeat epinephrine every 3–5 min if HR remains < 60 — document EACH dose with time',
+          '🔍 REVERSIBLE CAUSES — check ALL simultaneously:',
+          '  H1 — Hypovolemia: pale baby, blood loss → NS 10 ml/kg or O-neg blood 10 ml/kg over 5–10 min',
+          '  H2 — Hypoxia: re-check ETT — is it dislodged? blocked? wrong depth?',
+          '  H3 — Hypothermia: check temperature, warm overhead heater, warm blankets',
+          '  H4 — Hypoglycemia: RBS < 40 → D10% 2 ml/kg IV over 2–3 min',
+          '  H5 — Pneumothorax: transilluminate chest · asymmetric sounds → physician needle decompression',
+          '✅ HR RISES ≥ 60 at any point → CALL OUT TO TEAM · Stop compressions · Go to "✅ Recovery: Post-CPR Care" tab',
+          '⏰ Continue CPR at 3:1 ratio throughout — do not pause for epinephrine if IV/IO in place',
+        ],
+        physicianActions: [
+          'Confirm epinephrine dose, route, time — IV/IO strongly preferred over ETT',
+          'Point-of-care ultrasound: cardiac function, pneumothorax, pericardial effusion, volume status',
+          'Needle decompression if pneumothorax: 2nd ICS mid-clavicular line, 22G catheter',
+          'Volume (if hypovolemia): NS or O-neg pRBC 10 ml/kg over 5–10 min via UVC/IO',
+          '✅ RECOVERY — HR ≥ 60 returns:',
+          '  · Stop compressions · Continue PPV · Wean FiO₂ toward 21%',
+          '  · Urgent labs: ABG, RBS, CBC, electrolytes, lactate, blood culture, LFT',
+          '  · Assess for HIE: ≥36 wks + sentinel event → initiate cooling protocol within 6 hrs',
+          '  · NICU admission: IV access, monitoring, thermoregulation, documentation',
+          '  · Early family communication — explain what happened and what next steps are',
+          '⏰ No cardiac output at 20 min despite full resuscitation → compassionate family discussion re: discontinuation',
+          '📋 Full team debrief within 24 hrs — document timeline, interventions, decisions',
+        ]
+      },
+      {
+        label: '✅ Recovery: Routine Care (Term, Good Tone, Breathing)',
+        autoTrigger: null,
+        timerSec: null, timerLabel: '',
+        codeBlue: false,
+        nurseActions: [
+          '✅ BABY RECOVERED / NORMAL AT BIRTH — Routine Care pathway',
+          '👶 Skin-to-skin with parent immediately — promotes bonding, thermoregulation, breastfeeding',
+          '🌡 Maintain normothermia: axillary temp 36.5–37.5°C · warm blankets over mother and baby',
+          '📟 Ongoing assessment every 15 min for first hour:',
+          '  · Respiratory effort: rate, effort, colour (central cyanosis = abnormal)',
+          '  · HR: >100 bpm expected · SpO₂ pre-ductal ≥ 90% by 10 min',
+          '  · Tone and activity level · Feeding cues',
+          '🍼 Support early breastfeeding within first hour',
+          'Record Apgar score at 1 min and 5 min — document in notes',
+          'If any deterioration (apnea, colour change, tone change) → escalate immediately — reassess NRP pathway',
+        ],
+        physicianActions: [
+          'Document Apgar scores (1 min, 5 min) in delivery record',
+          'Assess for birth injury: clavicle, brachial plexus, facial palsy, caput/cephalhaematoma',
+          'If GA < 35 wks or BW < 2000g → admit to NICU regardless of initial status',
+          'Term infant with normal transition: rooming-in, support breastfeeding, routine observation',
+          'Parent counselling: what to watch for at home · when to seek medical attention',
+          'Newborn metabolic screen at 48–72 hours · hearing screen · eye exam as per local protocol',
+        ]
+      },
+      {
+        label: '✅ Recovery: Post-PPV Care (HR ≥ 100 after Ventilation)',
+        autoTrigger: null,
+        timerSec: null, timerLabel: '',
+        codeBlue: false,
+        nurseActions: [
+          '✅ HR ≥ 100 + improving after PPV — transition to supportive care',
+          '🫁 Wean respiratory support stepwise:',
+          '  · If breathing spontaneously → trial off PPV · support with CPAP 5–6 cmH₂O if needed',
+          '  · Titrate FiO₂ to maintain SpO₂ 91–95% (preterm) or 94–98% (term)',
+          '  · If ETT in place → confirm position, secure tube, consider early extubation if criteria met',
+          '🌡 Thermoregulation: axillary temp 36.5–37.5°C · transfer to pre-warmed incubator',
+          '📟 Continuous monitoring: HR, SpO₂, RR, Temp — document every 15 min × 2 hrs then hourly',
+          '🩸 Establish IV access if not already done — maintain glucose infusion (GIR 4–6 mg/kg/min)',
+          '🩸 Check RBS within 30 min of stabilisation — treat if < 40 mg/dL',
+          'Alert Neonatologist to any deterioration — do not hesitate to restart NRP if needed',
+        ],
+        physicianActions: [
+          'Document: duration of PPV, peak FiO₂ used, time of HR recovery, current SpO₂',
+          'Blood gas within 30–60 min of stabilisation — target pH 7.35–7.45, PaCO₂ 40–50 mmHg',
+          'If GA ≥ 36 wks + sentinel event + any encephalopathy signs → assess for HIE:',
+          '  · Sarnat/Thompson score · consider passive cooling while assessing (do not rewarm)',
+          '  · If HIE criteria met → active therapeutic hypothermia within 6 hours of birth',
+          'If preterm (< 35 wks) → surfactant consideration, caffeine, TPN, minimal handling',
+          'Screen: blood culture + CRP · consider antibiotics if maternal risk factors (PROM, fever, GBS)',
+          'Communicate clearly with parents: what happened, what was done, current status and plan',
+          'Debrief with resuscitation team within 24 hrs',
+        ]
+      },
+      {
+        label: '✅ Recovery: Post-CPR Care (HR ≥ 60 after Compressions / Epinephrine)',
+        autoTrigger: null,
+        timerSec: null, timerLabel: '',
+        codeBlue: false,
+        nurseActions: [
+          '✅ HR RECOVERED ≥ 60 (or ≥ 100) after compressions / epinephrine',
+          '🛑 STOP compressions immediately · announce to team: "HR is [X], stopping CPR"',
+          '🫁 Continue PPV until HR ≥ 100 + spontaneous breathing established',
+          '💨 Wean FiO₂ gradually back toward 21% — titrate to SpO₂ target',
+          '🌡 Thermoregulation critical: prevent further heat loss · warm environment · monitor temp q15 min',
+          '🩸 Urgent bloods: RBS (treat if < 40 mg/dL with D10% 2 ml/kg) · ABG · CBC · electrolytes · lactate · blood culture',
+          '📟 Continuous monitoring: HR, SpO₂, BP, RR, Temp, urine output',
+          '💉 Keep IV/IO access patent — document all drugs given (epinephrine doses, times, routes)',
+          '⚠ Watch for post-resuscitation deterioration — baby may destabilise within minutes to hours',
+          'Document resuscitation timeline: birth time · PPV start · compression start · HR recovery time · epinephrine doses',
+        ],
+        physicianActions: [
+          '🏥 Transfer to NICU immediately — call ahead to prepare warming, monitoring, ventilator',
+          'Urgent assessment for Hypoxic-Ischaemic Encephalopathy (HIE):',
+          '  · ≥ 36 wks + depressed at birth + required compressions / epi → HIGH risk HIE',
+          '  · DO NOT actively rewarm if cooling is planned — passive normothermia during assessment',
+          '  · Therapeutic hypothermia criteria: ≥ 36 wks, ≤ 6 hrs old, Sarnat ≥ Moderate, +/− aEEG',
+          '  · Start cooling protocol within 6 hours of birth if eligible',
+          'Urgent imaging + monitoring: amplitude EEG (aEEG) · cranial USS · echo if haemodynamically unstable',
+          'Metabolic support: correct hypoglycemia · treat metabolic acidosis if severe (pH < 7.1, HCO₃ < 12 mEq/L)',
+          'Seizure surveillance: prophylactic phenobarbitone if HIE moderate-severe (per unit protocol)',
+          'Renal monitoring: urine output (target > 1 ml/kg/hr) · creatinine at 24 hrs — post-asphyxia AKI common',
+          'Cardiovascular: echo to assess myocardial function · inotropes if MAP < GA or poor perfusion',
+          'Early parent communication: honest, compassionate · involve social work / chaplaincy if needed',
+          '📋 Formal team debrief within 24 hrs · complete resuscitation documentation · incident report if appropriate',
+        ]
+      },
+    ],
+    refs: '1. American Academy of Pediatrics / American Heart Association. NRP 9th Edition Algorithm. ©2025 AAP & AHA. | 2. Weiner GM, et al. Textbook of Neonatal Resuscitation (NRP) 8th Ed. AAP 2021. | 3. IAP-NRP 2022 Guidelines. | 4. AIIMS Protocols: Neonatology 2019, Ch. Resuscitation.'
+  },
+
+];
+
+
+const CATEGORIES = ['All', ...new Set(EVENTS.map(e => e.category))];
+
+// ─── CLOCK ────────────────────────────────────────────────────
+function tickClock() {
+  const now = new Date();
+  document.getElementById('clockDisplay').textContent =
+    now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+setInterval(tickClock, 1000); tickClock();
+
+// ─── MANUAL CONDITIONS GRID ───────────────────────────────────
+function renderCondGrid() {
+  const g = document.getElementById('condGrid');
+  g.innerHTML = MANUAL_CONDITIONS.map(c => `
+    <div class="cond-item ${manualFlags.has(c.id) ? 'active' : ''}" onclick="toggleManual('${c.id}')">
+      <div class="cond-dot"></div>
+      <span>${c.label}</span>
+    </div>`).join('');
+}
+
+function toggleManual(id) {
+  if (manualFlags.has(id)) manualFlags.delete(id);
+  else manualFlags.add(id);
+  renderCondGrid();
+  buildAlerts();
+  renderGrid();
+  updateSecBadges();
+}
+
+// ─── VITAL DOTS & LIVE VALIDATION ─────────────────────────────
+function getVitalVal(param) {
+  const map = { HR:'vHR', RR:'vRR', SpO2:'vSpO2', Temp:'vTemp',
+    BPs:'vBPs', BPd:'vBPd', CRT:'vCRT', UO:'vUO',
+    RBS:'lRBS', Na:'lNa', K:'lK', Ca:'lCa', Hct:'lHct', TSB:'lTSB', Hb:'lHb', Lact:'lLact' };
+  const el = document.getElementById(map[param]);
+  if (!el || el.value === '') return null;
+  return parseFloat(el.value);
+}
+
+function updateVitalDots() {
+  const ga = parseFloat(document.getElementById('ga').value) || 37;
+  const isPreterm = ga < 37;
+  const wt = parseFloat(document.getElementById('weight').value) || 3000;
+
+  // MAP estimation for BP alert
+  const bps = getVitalVal('BPs'), bpd = getVitalVal('BPd');
+  const map_val = bps && bpd ? (bps + 2*bpd)/3 : null;
+
+  const rules = [
+    { id: 'dot-HR',  val: getVitalVal('HR'),
+      red: v => v < 60 || v > 220, amber: v => v < 80 || v > 180 },
+    { id: 'dot-RR',  val: getVitalVal('RR'),
+      red: v => v < 20 || v > 80, amber: v => v > 60 },
+    { id: 'dot-SpO2', val: getVitalVal('SpO2'),
+      red: v => v < (isPreterm ? 88 : 90), amber: v => v < (isPreterm ? 91 : 93) || v > 98 },
+    { id: 'dot-Temp', val: getVitalVal('Temp'),
+      red: v => v < 36 || v > 38, amber: v => v < 36.5 || v > 37.5 },
+    { id: 'dot-BPs', val: bps,
+      red: v => v < (isPreterm ? 40 : 50) || v > 100, amber: v => v < 55 },
+    { id: 'dot-BPd', val: bpd, red: v => v < 20, amber: v => v < 30 },
+    { id: 'dot-CRT', val: getVitalVal('CRT'), red: v => v > 3, amber: v => v > 2 },
+    { id: 'dot-UO',  val: getVitalVal('UO'),  red: v => v < 0.5, amber: v => v < 1.0 },
+    { id: 'dot-RBS', val: getVitalVal('RBS'),
+      red: v => v < 25 || v > 200, amber: v => v < 45 || v > 150 },
+    { id: 'dot-Na',  val: getVitalVal('Na'),
+      red: v => v < 125 || v > 155, amber: v => v < 130 || v > 150 },
+    { id: 'dot-K',   val: getVitalVal('K'),
+      red: v => v < 2.5 || v > 6.5, amber: v => v < 3.0 || v > 6.0 },
+    { id: 'dot-Ca',  val: getVitalVal('Ca'),  red: v => v < 0.75, amber: v => v < 1.0 },
+    { id: 'dot-Hct', val: getVitalVal('Hct'), red: v => v > 70, amber: v => v > 65 },
+    { id: 'dot-TSB', val: getVitalVal('TSB'), red: v => v > 20, amber: v => v > 15 },
+    { id: 'dot-Hb',  val: getVitalVal('Hb'),  red: v => v < 10 || v > 22, amber: v => v < 12 },
+    { id: 'dot-Lact', val: getVitalVal('Lact'), red: v => v > 4, amber: v => v > 2 },
+  ];
+
+  rules.forEach(r => {
+    const el = document.getElementById(r.id);
+    if (!el) return;
+    if (r.val === null || isNaN(r.val)) { el.className = 'vital-dot'; return; }
+    el.className = 'vital-dot ' + (r.red(r.val) ? 'red' : r.amber(r.val) ? 'amber' : 'green');
+  });
+}
+
+// ─── COLLAPSIBLE SECTIONS ────────────────────────────────────
+function toggleSec(id) {
+  const body  = document.getElementById('body-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  if (arrow) arrow.classList.toggle('open', isOpen);
+}
+
+function openSec(id) {
+  const body  = document.getElementById('body-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (body)  body.classList.add('open');
+  if (arrow) arrow.classList.add('open');
+}
+
+// Update section abnormal count badges and auto-open if abnormal
+function updateSecBadges() {
+  // Vitals
+  const vitalsIds = ['dot-HR','dot-RR','dot-SpO2','dot-Temp','dot-BPs','dot-BPd','dot-CRT','dot-UO'];
+  const vitalsRed  = vitalsIds.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('red'); }).length;
+  const vitalsAmb  = vitalsIds.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('amber'); }).length;
+  setBadge('vitals', vitalsRed, vitalsAmb);
+  if (vitalsRed + vitalsAmb > 0) openSec('vitals');
+
+  // Labs
+  const labsIds = ['dot-RBS','dot-Na','dot-K','dot-Ca','dot-Hct','dot-TSB','dot-Hb','dot-Lact'];
+  const labsRed  = labsIds.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('red'); }).length;
+  const labsAmb  = labsIds.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('amber'); }).length;
+  setBadge('labs', labsRed, labsAmb);
+  if (labsRed + labsAmb > 0) openSec('labs');
+
+  // Vent — open if FiO2 > 40 or mode not room air
+  const fio2 = parseFloat(document.getElementById('vFiO2').value);
+  const mode = document.getElementById('vMode').value;
+  const ventAlert = (fio2 > 40) || (mode && mode !== 'Room Air' && mode !== '');
+  const cntVent = document.getElementById('cnt-vent');
+  if (cntVent) {
+    if (fio2 > 60) { cntVent.textContent = 'FiO₂ ' + fio2 + '%'; cntVent.className = 'sec-count show'; openSec('vent'); }
+    else if (mode && mode !== 'Room Air' && mode !== '') { cntVent.textContent = mode; cntVent.className = 'sec-count show warn'; openSec('vent'); }
+    else cntVent.className = 'sec-count';
+  }
+
+  // Meds — open if any text entered
+  const medsVal = document.getElementById('meds').value.trim();
+  const cntMeds = document.getElementById('cnt-meds');
+  if (cntMeds) {
+    const medsLines = medsVal ? medsVal.split('\n').filter(l => l.trim()).length : 0;
+    if (medsLines > 0) { cntMeds.textContent = medsLines + ' active'; cntMeds.className = 'sec-count show warn'; openSec('meds'); }
+    else cntMeds.className = 'sec-count';
+  }
+
+  // Flags — open if any manual flags set
+  const cntFlags = document.getElementById('cnt-flags');
+  if (cntFlags) {
+    if (manualFlags.size > 0) { cntFlags.textContent = manualFlags.size + ' flagged'; cntFlags.className = 'sec-count show'; openSec('flags'); }
+    else cntFlags.className = 'sec-count';
+  }
+}
+
+function setBadge(id, redCount, ambCount) {
+  const cnt = document.getElementById('cnt-' + id);
+  if (!cnt) return;
+  if (redCount > 0) { cnt.textContent = redCount + ' abnormal'; cnt.className = 'sec-count show'; }
+  else if (ambCount > 0) { cnt.textContent = ambCount + ' warning'; cnt.className = 'sec-count show warn'; }
+  else cnt.className = 'sec-count';
+}
+
+// Live updates on input
+['vHR','vRR','vSpO2','vTemp','vBPs','vBPd','vCRT','vUO',
+ 'lRBS','lNa','lK','lCa','lHct','lTSB','lHb','lLact','ga'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', () => { updateVitalDots(); updateSecBadges(); });
+});
+['vFiO2','vMode','meds'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateSecBadges);
+  if (el) el.addEventListener('change', updateSecBadges);
+});
+
+// ─── BUILD ALERTS (the summary pills) ──────────────────────────
+function buildAlerts() {
+  activeAlerts = [];
+  const ga = parseFloat(document.getElementById('ga').value) || 37;
+  const isPreterm = ga < 37;
+
+  // Helper
+  const v = param => getVitalVal(param);
+  const add = (type, label, eventId) => activeAlerts.push({type, label, eventId});
+
+  // HR
+  if (v('HR') !== null) {
+    if (v('HR') < 60) {
+      add('critical', `HR ${v('HR')} bpm — CRITICAL`, 'bradycardia');
+      add('critical', `HR ${v('HR')} bpm — NRP Step 4/5: CPR + Epinephrine`, 'nrp_resus');
+    }
+    else if (v('HR') < 100) {
+      add('warning', `HR ${v('HR')} bpm — NRP Step 2/3: PPV needed`, 'nrp_resus');
+      add('warning', `HR ${v('HR')} bpm — Low`, 'bradycardia');
+    }
+    else if (v('HR') < 80) add('warning', `HR ${v('HR')} bpm — Low`, 'bradycardia');
+    if (v('HR') > 220) add('critical', `HR ${v('HR')} bpm — SVT?`, 'tachycardia');
+    else if (v('HR') > 180) add('warning', `HR ${v('HR')} bpm — High`, 'tachycardia');
+  }
+
+  // SpO2
+  if (v('SpO2') !== null) {
+    const lo = isPreterm ? 88 : 90, lo2 = isPreterm ? 91 : 93;
+    if (v('SpO2') < lo) add('critical', `SpO₂ ${v('SpO2')}% — Desaturation`, 'desaturation');
+    else if (v('SpO2') < lo2) add('warning', `SpO₂ ${v('SpO2')}% — Low`, 'desaturation');
+    if (v('SpO2') > 98) add('warning', `SpO₂ ${v('SpO2')}% — Hyperoxia`, 'desaturation');
+  }
+
+  // RR
+  if (v('RR') !== null) {
+    if (v('RR') > 70) add('critical', `RR ${v('RR')}/min — Tachypnoea`, 'resp_distress');
+    else if (v('RR') > 60) add('warning', `RR ${v('RR')}/min — Tachypnoea`, 'resp_distress');
+    if (v('RR') < 20) add('critical', `RR ${v('RR')}/min — Bradypnoea / Apnea`, 'apnea');
+  }
+
+  // Temp
+  if (v('Temp') !== null) {
+    if (v('Temp') < 36.0) add('critical', `Temp ${v('Temp')}°C — Hypothermia`, 'hypothermia');
+    else if (v('Temp') < 36.5) add('warning', `Temp ${v('Temp')}°C — Mild Hypothermia`, 'hypothermia');
+    if (v('Temp') > 38.0) add('critical', `Temp ${v('Temp')}°C — Hyperthermia`, 'hyperthermia');
+    else if (v('Temp') > 37.5) add('warning', `Temp ${v('Temp')}°C — Elevated`, 'hyperthermia');
+  }
+
+  // BP / MAP
+  if (v('BPs') !== null && v('BPd') !== null) {
+    const map_v = (v('BPs') + 2*v('BPd'))/3;
+    if (map_v < ga) add('critical', `MAP ${map_v.toFixed(0)} — Below GA (${ga})`, 'shock');
+    else if (v('BPs') < 55) add('warning', `SBP ${v('BPs')} — Low BP`, 'shock');
+  }
+
+  // CRT
+  if (v('CRT') !== null) {
+    if (v('CRT') > 3) add('critical', `CRT ${v('CRT')}s — Prolonged`, 'shock');
+    else if (v('CRT') > 2) add('warning', `CRT ${v('CRT')}s — Borderline`, 'shock');
+  }
+
+  // UO
+  if (v('UO') !== null) {
+    if (v('UO') < 0.5) add('critical', `UO ${v('UO')} ml/kg/hr — Oliguria`, 'shock');
+    else if (v('UO') < 1.0) add('warning', `UO ${v('UO')} ml/kg/hr — Low`, 'shock');
+  }
+
+  // Lactate
+  if (v('Lact') !== null) {
+    if (v('Lact') > 4) add('critical', `Lactate ${v('Lact')} — Severe`, 'shock');
+    else if (v('Lact') > 2) add('warning', `Lactate ${v('Lact')} — Elevated`, 'shock');
+  }
+
+  // RBS
+  if (v('RBS') !== null) {
+    if (v('RBS') < 25) add('critical', `RBS ${v('RBS')} mg/dL — Severe Hypoglycemia`, 'hypoglycemia');
+    else if (v('RBS') < 45) add('warning', `RBS ${v('RBS')} mg/dL — Hypoglycemia`, 'hypoglycemia');
+    if (v('RBS') > 200) add('warning', `RBS ${v('RBS')} mg/dL — Hyperglycemia`, 'hypoglycemia');
+  }
+
+  // Na
+  if (v('Na') !== null) {
+    if (v('Na') < 125 || v('Na') > 155) add('critical', `Na ${v('Na')} mEq/L`, 'electrolytes');
+    else if (v('Na') < 130 || v('Na') > 150) add('warning', `Na ${v('Na')} mEq/L`, 'electrolytes');
+  }
+
+  // K
+  if (v('K') !== null) {
+    if (v('K') > 6.5 || v('K') < 2.5) add('critical', `K ${v('K')} mEq/L`, 'electrolytes');
+    else if (v('K') > 6.0 || v('K') < 3.0) add('warning', `K ${v('K')} mEq/L`, 'electrolytes');
+  }
+
+  // iCa
+  if (v('Ca') !== null) {
+    if (v('Ca') < 0.75) add('critical', `iCa ${v('Ca')} — Severe Hypocalcemia`, 'electrolytes');
+    else if (v('Ca') < 1.0) add('warning', `iCa ${v('Ca')} — Hypocalcemia`, 'electrolytes');
+  }
+
+  // Hct (polycythemia)
+  if (v('Hct') !== null) {
+    if (v('Hct') > 70) add('critical', `Hct ${v('Hct')}% — Polycythemia (PET threshold)`, 'polycythemia');
+    else if (v('Hct') > 65) add('warning', `Hct ${v('Hct')}% — Polycythemia`, 'polycythemia');
+  }
+
+  // TSB (jaundice)
+  if (v('TSB') !== null) {
+    if (v('TSB') > 25) add('critical', `TSB ${v('TSB')} mg/dL — Exchange threshold?`, 'jaundice');
+    else if (v('TSB') > 15) add('warning', `TSB ${v('TSB')} mg/dL — PT indicated?`, 'jaundice');
+  }
+
+  // Hb
+  if (v('Hb') !== null) {
+    if (v('Hb') < 10) add('critical', `Hb ${v('Hb')} g/dL — Anaemia`, 'deterioration');
+    if (v('Hb') > 22) add('critical', `Hb ${v('Hb')} g/dL — Polycythemia`, 'polycythemia');
+  }
+
+  // Ventilator flags
+  const fio2 = parseFloat(document.getElementById('vFiO2').value);
+  const mode = document.getElementById('vMode').value;
+  if (fio2 > 60 && mode && mode !== 'Room Air') add('warning', `FiO₂ ${fio2}% — High O₂ requirement`, 'resp_upgrade');
+  if (fio2 === 100) add('critical', `FiO₂ 100% — Maximal O₂`, 'resp_upgrade');
+
+  // Medications flags
+  const meds = document.getElementById('meds').value.toLowerCase();
+  if (meds.includes('dopamine') || meds.includes('dobutamine') || meds.includes('adrenaline') || meds.includes('epinephrine')) {
+    add('info', 'Vasopressor / Inotrope active', 'shock');
+  }
+  if (meds.includes('morphine') || meds.includes('fentanyl') || meds.includes('midazolam')) {
+    add('info', 'Opioid/Sedation active — apnea risk', 'apnea');
+  }
+  if (meds.includes('aminophylline') || meds.includes('caffeine')) {
+    add('info', 'Methylxanthine active (apnea therapy)', 'apnea');
+  }
+  if (meds.includes('antibiotic') || meds.includes('ampicillin') || meds.includes('gentamicin') || meds.includes('vancomycin')) {
+    add('info', 'Antibiotics active — sepsis context', 'deterioration');
+  }
+
+  // Manual flags
+  MANUAL_CONDITIONS.forEach(c => {
+    if (manualFlags.has(c.id)) add('manual', c.label, c.eventId);
+  });
+
+  // Mark events
+  EVENTS.forEach(ev => {
+    ev._autoFlagged = activeAlerts.some(a => a.eventId === ev.id && (a.type === 'critical' || a.type === 'warning'));
+    ev._manualFlagged = activeAlerts.some(a => a.eventId === ev.id && a.type === 'manual');
+    ev._infoFlagged = activeAlerts.some(a => a.eventId === ev.id && a.type === 'info');
+  });
+
+  renderAlertBox();
+}
+
+function renderAlertBox() {
+  const box = document.getElementById('alertSummaryBox');
+  const container = document.getElementById('alertPillsContainer');
+  const title = document.getElementById('alertBoxTitle');
+
+  if (activeAlerts.length === 0) {
+    box.className = 'alert-summary-box';
+    title.className = 'alert-box-title';
+    title.textContent = '⚡ Active Clinical Alerts';
+    container.innerHTML = '<div class="alert-empty">No active alerts — enter patient data and click Auto-Detect, or manually flag conditions above</div>';
+    renderProtocolBrowser();
+    return;
+  }
+
+  const hasCritical = activeAlerts.some(a => a.type === 'critical');
+  const hasWarning = activeAlerts.some(a => a.type === 'warning');
+  box.className = 'alert-summary-box ' + (hasCritical ? 'has-alerts' : hasWarning ? 'has-warnings' : '');
+  title.className = 'alert-box-title' + (hasCritical ? ' active-alerts' : '');
+  title.textContent = `⚡ ${activeAlerts.length} Active Alert${activeAlerts.length > 1 ? 's' : ''}`;
+
+  container.innerHTML = '<div class="alert-pills">' +
+    activeAlerts.map(a => `
+      <div class="alert-pill ${a.type}" onclick="jumpToEvent('${a.eventId}')" title="Click to open ${a.eventId} protocol">
+        <div class="alert-pill-dot"></div>${a.label}
+      </div>`).join('') +
+    '</div>';
+  renderProtocolBrowser();
+}
+
+function jumpToEvent(eventId) {
+  const ev = EVENTS.find(e => e.id === eventId);
+  if (!ev) return;
+  // Switch category tab
+  activeCat = ev.category;
+  renderCats();
+  renderGrid();
+  // Select event
+  selectEvent(eventId);
+  // Scroll event card into view
+  setTimeout(() => {
+    const card = document.getElementById('card-' + eventId);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 100);
+}
+
+// ─── AUTO DETECT ──────────────────────────────────────────────
+function autoDetect() {
+  buildAlerts();
+
+  const result = document.getElementById('autoResult');
+  const critCount = activeAlerts.filter(a => a.type === 'critical').length;
+  const warnCount = activeAlerts.filter(a => a.type === 'warning').length;
+  const flagged = EVENTS.filter(e => e._autoFlagged);
+
+  if (flagged.length === 0 && !activeAlerts.some(a=>a.type==='manual')) {
+    result.className = 'auto-result ok';
+    result.textContent = '✓ No threshold breaches detected in entered values';
+  } else {
+    result.className = 'auto-result warn';
+    result.textContent = `⚠ ${critCount} critical, ${warnCount} warning alert${(critCount+warnCount)>1?'s':''} — see summary above`;
+  }
+  renderGrid();
+  addAudit('Auto-detect run — ' + activeAlerts.length + ' alerts generated');
+}
+
+// ─── PROTOCOL BROWSER (default right panel) ───────────────────
+function renderProtocolBrowser() {
+  // Renamed to renderActiveAlertsList — only show flagged/alerted events, not all protocols
+  renderActiveAlertsList();
+}
+
+function renderActiveAlertsList() {
+  const listEl  = document.getElementById('activeAlertsList');
+  const emptyEl = document.getElementById('noAlertsMsg');
+  if (!listEl) return;
+
+  // Only show events that are flagged (critical, warning, manual, info)
+  const flagged = EVENTS.filter(e =>
+    activeAlerts.some(a => a.eventId === e.id) || e._manualFlagged
+  );
+
+  // Sort: critical first, then warning, then manual, then info
+  flagged.sort((a, b) => {
+    const score = ev => {
+      if (activeAlerts.some(x => x.eventId === ev.id && x.type === 'critical')) return 100;
+      if (activeAlerts.some(x => x.eventId === ev.id && x.type === 'warning'))  return 80;
+      if (ev._manualFlagged) return 60;
+      if (ev._infoFlagged)   return 40;
+      return 0;
+    };
+    return score(b) - score(a);
+  });
+
+  if (flagged.length === 0) {
+    listEl.style.display  = 'none';
+    emptyEl.style.display = 'flex';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  listEl.style.display  = 'flex';
+
+  const critical = flagged.filter(e => activeAlerts.some(a => a.eventId === e.id && a.type === 'critical'));
+  const warning  = flagged.filter(e => !critical.includes(e) && (activeAlerts.some(a => a.eventId === e.id && a.type === 'warning') || e._manualFlagged));
+  const info     = flagged.filter(e => !critical.includes(e) && !warning.includes(e));
+
+  let html = '';
+  if (critical.length) {
+    html += `<div class="proto-section-header">🔴 Critical (${critical.length})</div>`;
+    html += critical.map(ev => activeAlertItemHTML(ev)).join('');
+  }
+  if (warning.length) {
+    html += `<div class="proto-section-header">🟡 Warning / Flagged (${warning.length})</div>`;
+    html += warning.map(ev => activeAlertItemHTML(ev)).join('');
+  }
+  if (info.length) {
+    html += `<div class="proto-section-header">ℹ Info (${info.length})</div>`;
+    html += info.map(ev => activeAlertItemHTML(ev)).join('');
+  }
+
+  listEl.innerHTML = html;
+}
+
+function activeAlertItemHTML(ev) {
+  const c      = CAT_COLORS[ev.category] || '#64748b';
+  const alerts = activeAlerts.filter(a => a.eventId === ev.id);
+  const hasCrit   = alerts.some(a => a.type === 'critical');
+  const hasWarn   = alerts.some(a => a.type === 'warning');
+  const isActive  = selectedEvent?.id === ev.id;
+
+  const itemClass  = isActive ? 'flagged-critical' : hasCrit ? 'flagged-critical' : hasWarn || ev._manualFlagged ? 'flagged-warning' : '';
+  const badgeClass = hasCrit ? 'critical' : hasWarn ? 'warning' : ev._manualFlagged ? 'manual' : 'normal';
+  const badgeText  = hasCrit ? '⚠ ALERT' : hasWarn ? '⚡ WARN' : ev._manualFlagged ? '★ FLAGGED' : 'ℹ INFO';
+
+  const alertLabel = alerts.length > 0 ? alerts[0].label : '';
+
+  return `<div class="proto-item ${itemClass}" style="${isActive ? `border-color:${c};box-shadow:0 0 0 2px ${c}22;` : ''}" onclick="selectEvent('${ev.id}')">
+    <div class="proto-icon">${ev.icon}</div>
+    <div class="proto-info">
+      <div class="proto-name" style="${isActive ? `color:${c};font-weight:800;` : ''}">${ev.name}</div>
+      <div class="proto-cat" style="color:${c}">${ev.category}${alertLabel ? ` · <span style="color:var(--red);font-size:0.58rem;">${alertLabel}</span>` : ''}</div>
+    </div>
+    <div class="proto-badge ${badgeClass}">${badgeText}</div>
+  </div>`;
+}
+
+
+function closeProtocol() {
+  selectedEvent = null;
+  selectedThresholdIdx = null;
+  checkedActions.clear();
+  stopTimer();
+  document.getElementById('noEvent').style.display = 'flex';
+  const esc = document.getElementById('escContent');
+  esc.classList.add('hidden');
+  esc.style.display = 'none';
+  renderGrid();
+  renderActiveAlertsList();
+}
+
+function renderCats() {
+  document.getElementById('catTabs').innerHTML = CATEGORIES.map(c => {
+    const col = CAT_COLORS[c] || '#64748b';
+    const isActive = c === activeCat;
+    const flagCount = c === 'All' ? EVENTS.filter(e => e._autoFlagged || e._manualFlagged).length
+      : EVENTS.filter(e => e.category === c && (e._autoFlagged || e._manualFlagged)).length;
+    return `<button class="cat-tab ${isActive ? 'active' : ''}"
+      style="${isActive ? `background:${col};` : ''}"
+      onclick="setActiveCat('${c}')">
+      ${c}${flagCount > 0 ? ` <span style="background:rgba(255,255,255,0.35);padding:0 5px;border-radius:100px;font-size:0.6rem;">${flagCount}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+function setActiveCat(c) { activeCat = c; renderCats(); renderGrid(); }
+
+function renderGrid() {
+  const filtered = EVENTS.filter(e => activeCat === 'All' || e.category === activeCat);
+  // Sort: critical-flagged first, then warning-flagged, then manual, then info, then rest
+  filtered.sort((a, b) => {
+    const score = ev => {
+      if (ev._autoFlagged) {
+        const al = activeAlerts.find(x => x.eventId === ev.id && x.type === 'critical');
+        return al ? 100 : 80;
+      }
+      if (ev._manualFlagged) return 60;
+      if (ev._infoFlagged) return 40;
+      return 0;
+    };
+    return score(b) - score(a);
+  });
+  document.getElementById('eventGrid').innerHTML = filtered.map(ev => {
+    const c = CAT_COLORS[ev.category] || '#64748b';
+    const isActive = selectedEvent?.id === ev.id;
+    const isFlagged = ev._autoFlagged;
+    const isManual = ev._manualFlagged;
+    const isInfo = ev._infoFlagged;
+    let cardClass = `event-card ${isActive ? 'active' : ''} ${isFlagged ? 'auto-flagged' : ''} ${isManual ? 'manual-flagged' : ''}`;
+    let cardStyle = isActive ? `border-color:${c};` : isFlagged ? `border-color:${CAT_COLORS['Cardiovascular']};` : '';
+    let badge = '';
+    if (isFlagged) badge = '<div class="flag-badge flag-auto">⚠ ALERT</div>';
+    else if (isManual) badge = '<div class="flag-badge flag-manual">★ FLAGGED</div>';
+    else if (isInfo) badge = '<div class="flag-badge flag-abg">ℹ INFO</div>';
+    return `
+      <div class="${cardClass}" id="card-${ev.id}" style="${cardStyle}" onclick="selectEvent('${ev.id}')">
+        <div class="card-stripe" style="background:${c}"></div>
+        <div class="card-sev sev-${ev.severity}"></div>
+        <div class="event-icon">${ev.icon}</div>
+        <div class="event-name">${ev.name}</div>
+        <div class="event-cat-tag" style="color:${c}">${ev.category}</div>
+        ${badge}
+      </div>`;
+  }).join('');
+}
+
+// ─── SELECT EVENT ─────────────────────────────────────────────
+function selectEvent(id) {
+  selectedEvent = EVENTS.find(e => e.id === id);
+  selectedThresholdIdx = null;
+  checkedActions.clear();
+  stopTimer();
+
+  document.getElementById('noEvent').style.display = 'none';
+  const esc = document.getElementById('escContent');
+  esc.classList.remove('hidden');
+  esc.style.display = 'flex';
+
+  const c = CAT_COLORS[selectedEvent.category] || '#64748b';
+  document.getElementById('escName').textContent = selectedEvent.icon + '  ' + selectedEvent.name;
+  document.getElementById('escName').style.color = c;
+  document.getElementById('escChip').textContent = '';
+  document.getElementById('escChip').style.cssText = '';
+
+  const sevSel = document.getElementById('severitySel');
+  const sevOpts = document.getElementById('sevOptions');
+  const thresholds = selectedEvent.thresholds;
+
+  if (thresholds.length === 1) {
+    sevSel.style.display = 'none';
+    activateThreshold(0);
+  } else {
+    sevSel.style.display = 'block';
+    sevOpts.innerHTML = thresholds.map((t, i) => {
+      // Color by label content
+      let dotColor, btnBg, btnBorder;
+      if (t.label.startsWith('✅')) {
+        dotColor = '#059669'; btnBg = '#f0fdf4'; btnBorder = '#86efac';
+      } else if (t.codeBlue || t.label.includes('🚨')) {
+        dotColor = '#dc2626'; btnBg = '#fef2f2'; btnBorder = '#fca5a5';
+      } else if (t.label.includes('🔴')) {
+        dotColor = '#dc2626'; btnBg = '#fef2f2'; btnBorder = '#fca5a5';
+      } else {
+        dotColor = CAT_COLORS[selectedEvent.category] || '#64748b';
+        btnBg = 'var(--surface2)'; btnBorder = 'var(--border)';
+      }
+      return `
+      <button class="sev-btn" id="sev-${i}" onclick="activateThreshold(${i})"
+        style="background:${btnBg}; border-color:${btnBorder};">
+        <div class="sev-dot" style="background:${dotColor}"></div>
+        <div class="sev-btn-text">${t.label}</div>
+      </button>`;
+    }).join('');
+    const detectedIdx = detectThresholdFromVitals(selectedEvent);
+    if (detectedIdx !== null) activateThreshold(detectedIdx);
+  }
+  renderGrid();
+  renderActiveAlertsList();
+}
+
+function detectThresholdFromVitals(ev) {
+  if (!ev.triggerParam) return null;
+  const val = getVitalVal(ev.triggerParam);
+  if (val === null) return null;
+  for (let i = ev.thresholds.length - 1; i >= 0; i--) {
+    const fn = ev.thresholds[i].autoTrigger;
+    if (fn && fn(val)) return i;
+  }
+  return null;
+}
+
+// ─── ACTIVATE THRESHOLD ───────────────────────────────────────
+function activateThreshold(idx) {
+  selectedThresholdIdx = idx;
+  checkedActions.clear();
+  const t = selectedEvent.thresholds[idx];
+  const c = CAT_COLORS[selectedEvent.category] || '#64748b';
+
+  document.querySelectorAll('.sev-btn').forEach((el, i) => el.classList.toggle('selected', i === idx));
+
+  const chip = document.getElementById('escChip');
+  chip.textContent = t.label;
+  const isRecovery = t.label.startsWith('✅');
+  chip.style.background = isRecovery ? '#f0fdf4' : t.codeBlue ? '#fee2e2' : '#f0f9ff';
+  chip.style.color     = isRecovery ? '#059669' : t.codeBlue ? '#dc2626' : c;
+  chip.style.border    = `1px solid ${isRecovery ? '#86efac' : t.codeBlue ? '#fca5a5' : '#bae6fd'}`;
+
+  const bar = document.getElementById('timerBar');
+  if (t.timerSec) {
+    bar.classList.add('show');
+    document.getElementById('timerDesc').textContent = t.timerLabel;
+    startTimer(t.timerSec);
+  } else { bar.classList.remove('show'); stopTimer(); }
+
+  document.getElementById('codeBtn').style.display = t.codeBlue ? 'block' : 'none';
+  renderActions();
+  renderReferences();
+}
+
+// ─── RENDER ACTIONS ───────────────────────────────────────────
+let physExpanded = false;
+
+function renderActions() {
+  const t = selectedEvent.thresholds[selectedThresholdIdx];
+
+  const nrpTable = selectedEvent.id === 'nrp_resus' ? `
+    <div class="nrp-info-box">
+      <strong>NRP 9th Ed — Target SpO₂ Table</strong>
+      <table class="nrp-spo2-table" style="width:100%; margin-top:6px;">
+        <tr><th>Time after birth</th><th>Target SpO₂</th></tr>
+        <tr><td>2 min</td><td>65–70%</td></tr>
+        <tr><td>3 min</td><td>70–75%</td></tr>
+        <tr><td>4 min</td><td>75–80%</td></tr>
+        <tr><td>5 min</td><td>80–85%</td></tr>
+        <tr><td>10 min</td><td>85–95%</td></tr>
+      </table>
+      <div style="font-size:0.62rem; color:var(--text-dim); margin-top:5px;">Pre-ductal (right hand). © 2025 AAP &amp; AHA.</div>
+    </div>` : '';
+
+  const nurseHtml = t.nurseActions?.length ? `
+    <div class="role-block">
+      <div class="role-tag role-nurse">🩺 Nurse Actions</div>
+      <div class="action-list">
+        ${t.nurseActions.map((a, i) => {
+          const key = `nurse-${i}`;
+          const done = checkedActions.has(key);
+          return `<button class="action-item ${done ? 'done' : ''}"
+            onclick="toggleAction('nurse',${i},'${a.replace(/'/g,"\\'").replace(/\n/g,' ')}')">
+            <div class="action-check"></div>
+            <div class="action-text">${a}</div>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  const physHtml = t.physicianActions?.length ? `
+    <div class="role-block">
+      <button onclick="togglePhysActions()" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-family:var(--font);margin-bottom:4px;transition:all 0.12s;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--border)'">
+        <span style="font-size:0.6rem;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;padding:2px 8px;border-radius:100px;background:var(--red-mid);color:var(--red);border:1px solid #fca5a5;">👨‍⚕️ Neonatologist Actions</span>
+        <span style="flex:1"></span>
+        <span style="font-size:0.62rem;color:var(--text-muted);" id="physToggleLabel">${physExpanded ? 'Hide ▲' : 'Show ▼'}</span>
+      </button>
+      <div id="physActionList" style="display:${physExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;">
+        ${t.physicianActions.map((a, i) => {
+          const key = `physician-${i}`;
+          const done = checkedActions.has(key);
+          return `<button class="action-item ${done ? 'done' : ''}"
+            onclick="toggleAction('physician',${i},'${a.replace(/'/g,"\\'").replace(/\n/g,' ')}')">
+            <div class="action-check"></div>
+            <div class="action-text">${a}</div>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  document.getElementById('actionArea').innerHTML = nrpTable + nurseHtml + physHtml;
+}
+
+function togglePhysActions() {
+  physExpanded = !physExpanded;
+  const list  = document.getElementById('physActionList');
+  const label = document.getElementById('physToggleLabel');
+  if (list)  list.style.display  = physExpanded ? 'flex' : 'none';
+  if (label) label.textContent   = physExpanded ? 'Hide ▲' : 'Show ▼';
+}
+
+
+function toggleAction(role, idx, text) {
+  const key = `${role}-${idx}`;
+  if (checkedActions.has(key)) checkedActions.delete(key);
+  else { checkedActions.add(key); addAudit(`✓ [${role === 'nurse' ? 'Nurse' : 'Physician'}] ${text}`); }
+  renderActions();
+}
+
+// ─── RENDER REFERENCES ────────────────────────────────────────
+function renderReferences() {
+  const refBlock = document.getElementById('refBlock');
+  const refList = document.getElementById('refList');
+  const refs = selectedEvent?.refs;
+  if (!refs) { refBlock.style.display = 'none'; return; }
+  refBlock.style.display = 'block';
+  refList.innerHTML = refs.split(' | ').map((r, i) => `<div>${i+1 < 2 ? '' : ''}${r}</div>`).join('');
+}
+
+// ─── TIMER ────────────────────────────────────────────────────
+function startTimer(sec) {
+  stopTimer(); timerRemaining = sec; renderTimer();
+  timerInterval = setInterval(() => {
+    timerRemaining--;
+    renderTimer();
+    if (timerRemaining <= 0) { stopTimer(); document.getElementById('timerNum').textContent = '⏰ 00:00'; showToast('⏰ Time limit reached — escalate now!'); }
+  }, 1000);
+}
+function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+function resetTimer() {
+  if (selectedEvent && selectedThresholdIdx !== null) {
+    const sec = selectedEvent.thresholds[selectedThresholdIdx].timerSec;
+    if (sec) startTimer(sec);
+  }
+}
+function renderTimer() {
+  const m = String(Math.floor(timerRemaining / 60)).padStart(2, '0');
+  const s = String(timerRemaining % 60).padStart(2, '0');
+  const el = document.getElementById('timerNum');
+  el.textContent = `${m}:${s}`;
+  el.style.color = timerRemaining < 30 ? '#dc2626' : timerRemaining < 90 ? '#d97706' : '#059669';
+}
+
+// ─── ABG ANALYSIS ─────────────────────────────────────────────
+function analyseABG() {
+  const pH   = parseFloat(document.getElementById('abgPH').value);
+  const pco2 = parseFloat(document.getElementById('abgCO2').value);
+  const hco3 = parseFloat(document.getElementById('abgHCO3').value);
+  const be   = parseFloat(document.getElementById('abgBE').value);
+  const po2  = parseFloat(document.getElementById('abgPO2').value);
+  const sao2 = parseFloat(document.getElementById('abgSaO2').value);
+  const fio2 = parseFloat(document.getElementById('vFiO2').value) || 21;
+
+  const res = document.getElementById('abgResult');
+
+  if (isNaN(pH) || isNaN(pco2) || isNaN(hco3)) {
+    res.className = 'abg-result show warning';
+    res.innerHTML = '<div class="abg-result-title">⚠ Incomplete ABG</div>Enter pH, PaCO₂ and HCO₃⁻ to analyse.';
+    return;
+  }
+
+  let lines = [];
+  let severity = 'normal';
+  let primaryDx = '';
+  let nurseActions = [];
+
+  // ── Step 1: pH ──
+  const acidosis = pH < 7.35;
+  const alkalosis = pH > 7.45;
+  const normalPH = !acidosis && !alkalosis;
+
+  // ── Step 2: Primary disturbance ──
+  const respAcidosis  = pco2 > 45;
+  const respAlkalosis = pco2 < 35;
+  const metabAcidosis  = hco3 < 22;
+  const metabAlkalosis = hco3 > 26;
+
+  // ── Step 3: Anion Gap (if Na available) ──
+  const na = parseFloat(document.getElementById('lNa').value);
+  const cl = NaN; // not tracked — skip if unavailable
+  let agStr = '';
+  if (!isNaN(na)) {
+    const ag = na - hco3 - 104; // approximation without Cl: AG = Na - HCO3 - 104 (normal ~12)
+    agStr = `Estimated Anion Gap (without Cl): ~${ag.toFixed(0)} mEq/L${ag > 16 ? ' — ELEVATED (consider lactic/keto/sepsis)' : ' — Normal'}`;
+  }
+
+  // ── Step 4: Compensation check ──
+  let compStatus = '';
+  let expectedComp = '';
+
+  if (acidosis && respAcidosis) {
+    primaryDx = 'Respiratory Acidosis (Ventilatory Failure)';
+    const expectedHCO3Acute  = 24 + 0.1*(pco2-40);
+    const expectedHCO3Chronic = 24 + 0.35*(pco2-40);
+    if (Math.abs(hco3 - expectedHCO3Acute) < 2) compStatus = 'Acute / Uncompensated';
+    else if (hco3 > expectedHCO3Acute && hco3 < expectedHCO3Chronic) compStatus = 'Partially Compensated (renal retaining HCO₃⁻)';
+    else if (hco3 >= expectedHCO3Chronic) compStatus = 'Fully Compensated / Chronic';
+    else compStatus = 'Mixed disorder likely';
+    expectedComp = `Expected HCO₃⁻: acute ~${expectedHCO3Acute.toFixed(1)}, chronic ~${expectedHCO3Chronic.toFixed(1)} mEq/L`;
+    severity = 'critical';
+    nurseActions = [
+      'Check ETT position — auscultate and confirm chest rise bilaterally',
+      'Increase vent rate or PIP as per physician order to blow off CO₂',
+      'Check for tube obstruction — suction ETT gently',
+      'Ensure FiO₂ is adequate — titrate per SpO₂ and PaO₂',
+      'Alert Neonatologist immediately — pH < 7.25 or PaCO₂ > 60 mmHg requires urgent review',
+      'Reassess ABG in 30–60 min after ventilator changes',
+    ];
+  } else if (acidosis && metabAcidosis) {
+    primaryDx = 'Metabolic Acidosis';
+    const expectedPCO2 = 1.5*hco3 + 8; // Winter's formula adaptation
+    if (Math.abs(pco2 - expectedPCO2) < 3) compStatus = 'Appropriate respiratory compensation (Kussmaul\'s breathing)';
+    else if (pco2 > expectedPCO2 + 3) compStatus = 'Inadequate respiratory compensation — additional respiratory acidosis?';
+    else compStatus = 'Over-compensation — respiratory alkalosis co-existing (mixed disorder)';
+    expectedComp = `Expected PaCO₂ (adapted Winter's): ~${expectedPCO2.toFixed(0)} mmHg`;
+    severity = pH < 7.2 ? 'critical' : 'warning';
+    nurseActions = [
+      'Identify underlying cause: check RBS (hypoglycemia), urine output (renal failure), stool output (diarrhea)',
+      'Ensure adequate IV access — notify physician for fluid resuscitation',
+      `${!isNaN(na) && (na - hco3 - 104) > 16 ? 'Elevated anion gap — consider sepsis, shock, inborn error of metabolism' : 'Normal anion gap — consider bicarbonate loss (diarrhea, renal tubular acidosis)'}`,
+      'Check for sepsis signs: temperature, CRT, BP, urine output',
+      'NaHCO₃ correction ONLY if HCO₃⁻ < 15 mEq/L or pH < 7.20 (per physician order)',
+      `NaHCO₃ dose if ordered: (15 − ${hco3.toFixed(0)}) × 0.6 × weight(kg) = ${(Math.max(0,(15-hco3)*0.6)).toFixed(1)} × weight mmol — give HALF as slow IV bolus`,
+      'Monitor serum K⁺ — correcting acidosis may unmask hypokalemia',
+      'Repeat ABG in 2–4 hours after intervention',
+    ];
+  } else if (alkalosis && respAlkalosis) {
+    primaryDx = 'Respiratory Alkalosis';
+    const expectedHCO3 = 24 - 0.2*(40-pco2);
+    compStatus = hco3 < expectedHCO3 - 2 ? 'Partially Compensated (renal excreting HCO₃⁻)' : 'Acute / Uncompensated';
+    expectedComp = `Expected HCO₃⁻: ~${expectedHCO3.toFixed(1)} mEq/L`;
+    severity = 'warning';
+    nurseActions = [
+      'Assess for causes: fever, pain, agitation, sepsis, hyperventilation on ventilator',
+      'Check temperature — treat fever if > 37.5°C',
+      'Review vent settings — if over-ventilated, notify physician to reduce rate or VT',
+      'Check RBS and electrolytes — alkalosis causes low ionized Ca²⁺',
+      'Assess neurological status — alkalosis can cause muscle irritability and seizures',
+      'Provide comfort care if pain/agitation is the cause',
+    ];
+  } else if (alkalosis && metabAlkalosis) {
+    primaryDx = 'Metabolic Alkalosis';
+    const expectedPCO2 = 40 + 0.7*(hco3-24);
+    compStatus = Math.abs(pco2 - expectedPCO2) < 5 ? 'Compensated (hypoventilation)' : 'Uncompensated';
+    expectedComp = `Expected PaCO₂: ~${expectedPCO2.toFixed(0)} mmHg`;
+    severity = 'warning';
+    nurseActions = [
+      'Review fluids — ensure adequate ECF volume (saline-responsive alkalosis most common)',
+      'Check serum K⁺ — hypokalemia aggravates metabolic alkalosis',
+      'Review NG tube drainage — replace volume-for-volume with N/2 saline',
+      'Review diuretic orders — stop if possible, per physician',
+      'Monitor for signs of tetany (alkalosis → reduced ionized Ca²⁺)',
+      'Notify physician — correct K⁺ and volume first before other interventions',
+    ];
+  } else if (normalPH && (respAcidosis || metabAcidosis || respAlkalosis || metabAlkalosis)) {
+    primaryDx = 'Fully Compensated Acid-Base Disturbance';
+    severity = 'warning';
+    compStatus = 'pH normal but primary disturbance present — chronic/compensated state';
+    nurseActions = [
+      'pH is compensated but underlying pathology persists — monitor closely',
+      'Check clinical status — compensated ABG does not mean patient is improving',
+      'Note trend vs previous ABGs — compare for direction of change',
+      'Alert Neonatologist for clinical review and management plan',
+    ];
+  } else {
+    primaryDx = 'Normal ABG';
+    severity = 'normal';
+    compStatus = 'All parameters within acceptable range';
+    nurseActions = ['Continue regular monitoring as per care plan'];
+  }
+
+  // ── Oxygenation ──
+  let o2Status = '';
+  let o2Sev = '';
+  if (!isNaN(po2)) {
+    // Neonatal: normal PaO₂ 50–80 mmHg
+    if (po2 < 40) { o2Status = '⚠ Severe Hypoxemia (PaO₂ < 40 mmHg)'; o2Sev = 'critical'; }
+    else if (po2 < 50) { o2Status = '⚠ Moderate Hypoxemia (PaO₂ 40–50 mmHg)'; o2Sev = 'warning'; }
+    else if (po2 < 60) { o2Status = '↓ Mild Hypoxemia (PaO₂ 50–60 mmHg)'; o2Sev = 'warning'; }
+    else if (po2 > 100) { o2Status = '↑ Hyperoxia — reduce FiO₂ (target PaO₂ 50–80 for preterm)'; o2Sev = 'warning'; }
+    else { o2Status = '✓ Acceptable Oxygenation'; }
+
+    // A-a gradient estimate
+    const pao2_expected = (fio2/100)*713 - pco2/0.8;
+    const aa_gap = pao2_expected - po2;
+    if (aa_gap > 20) o2Status += ` | A-a gradient ~${aa_gap.toFixed(0)} mmHg (elevated — parenchymal disease)`;
+  }
+
+  if (o2Sev === 'critical') severity = 'critical';
+  else if (o2Sev === 'warning' && severity === 'normal') severity = 'warning';
+
+  // ── Build output ──
+  const sevClass = severity === 'critical' ? 'critical' : severity === 'warning' ? 'warning' : 'normal';
+  const sevIcon = severity === 'critical' ? '🔴' : severity === 'warning' ? '🟡' : '🟢';
+
+  res.className = `abg-result show ${sevClass}`;
+  res.innerHTML = `
+    <div class="abg-result-title">${sevIcon} ${primaryDx}</div>
+    <div style="margin-bottom:4px; font-size:0.66rem; color:var(--text-dim);">${compStatus}</div>
+    ${expectedComp ? `<div style="margin-bottom:4px; font-size:0.65rem; color:var(--text-dim);">${expectedComp}</div>` : ''}
+    ${agStr ? `<div style="margin-bottom:6px; font-size:0.65rem;">${agStr}</div>` : ''}
+    ${o2Status ? `<div style="margin-bottom:6px; font-size:0.65rem; font-weight:600;">${o2Status}</div>` : ''}
+    <div style="font-size:0.64rem; font-weight:700; color:var(--blue); margin-bottom:3px; text-transform:uppercase; letter-spacing:0.06em;">Nurse Actions:</div>
+    <ul style="font-size:0.66rem; padding-left:14px;">
+      ${nurseActions.map(a => `<li style="margin-bottom:3px;">${a}</li>`).join('')}
+    </ul>
+    <div style="font-size:0.6rem; color:var(--text-muted); margin-top:6px; border-top:1px solid var(--border); padding-top:4px;">
+      Ref: Vijaya Sekaran D et al. ABG Analysis in Clinical Practice. Indian Pediatrics 2001;38:1116–1128. | AIIMS Protocols 2019.
+    </div>`;
+
+  // Add ABG flag to alert box if abnormal
+  if (severity !== 'normal') {
+    const abgAlert = { type: severity === 'critical' ? 'critical' : 'warning', label: `ABG: ${primaryDx}`, eventId: 'resp_distress' };
+    const alreadyHas = activeAlerts.some(a => a.label.startsWith('ABG:'));
+    if (!alreadyHas) { activeAlerts.push(abgAlert); renderAlertBox(); }
+  }
+  addAudit(`ABG analysed: ${primaryDx} — ${compStatus}`);
+}
+
+// ─── GOOGLE CHAT WEBHOOK ESCALATION ──────────────────────────
+async function doEscalate(target) {
+  const bed   = document.getElementById('bedId').value.trim() || 'Unknown Bed';
+  const ga    = document.getElementById('ga').value || '?';
+  const wt    = document.getElementById('weight').value || '?';
+  const dol   = document.getElementById('dol').value || '?';
+  const neo   = document.getElementById('neoName').value.trim() || 'Neonatologist on duty';
+  const event = selectedEvent ? selectedEvent.name : 'Unspecified event';
+  const threshold = selectedEvent && selectedThresholdIdx !== null
+    ? selectedEvent.thresholds[selectedThresholdIdx]?.label : '';
+  const hr    = document.getElementById('vHR').value || '—';
+  const rr    = document.getElementById('vRR').value || '—';
+  const spo2  = document.getElementById('vSpO2').value || '—';
+  const temp  = document.getElementById('vTemp').value || '—';
+  const bps   = document.getElementById('vBPs').value || '—';
+  const bpd   = document.getElementById('vBPd').value || '—';
+  const rbs   = document.getElementById('lRBS').value || '—';
+  const time  = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  const isCode = target === 'CODE BLUE';
+  const urgencyText = isCode ? '🚨 CODE BLUE ACTIVATED' : '⬆ ESCALATION REQUEST';
+
+  const logMsg = isCode ? '🚨 CODE BLUE ACTIVATED' : `↑ Escalated to ${target}: ${neo}`;
+  addAudit(logMsg);
+  showToast(logMsg);
+
+  const webhookUrl = document.getElementById('webhookUrl').value.trim();
+  if (!webhookUrl) {
+    document.getElementById('webhookStatus').className = 'webhook-status err';
+    document.getElementById('webhookStatus').textContent = 'No webhook URL';
+    showToast('⚠ No webhook URL configured — escalation logged locally only', 'error');
+    return;
+  }
+
+  const msgText = isCode
+    ? `🚨 *CODE BLUE — NICU*\n*Bed:* ${bed} | *GA:* ${ga}wks | *Wt:* ${wt}g | *DOL:* ${dol}\n*Event:* ${event}\n*Vitals:* HR ${hr} | RR ${rr} | SpO₂ ${spo2}% | Temp ${temp}°C | BP ${bps}/${bpd}\n*RBS:* ${rbs} mg/dL\n*Time:* ${time}\n⚠ ALL AVAILABLE STAFF TO BEDSIDE IMMEDIATELY`
+    : `⬆ *NICU Escalation — ${event}*\n*Bed:* ${bed} | *GA:* ${ga}wks | *Wt:* ${wt}g | *DOL:* ${dol}\n*Threshold:* ${threshold}\n*Vitals:* HR ${hr} | RR ${rr} | SpO₂ ${spo2}% | Temp ${temp}°C | BP ${bps}/${bpd}\n*RBS:* ${rbs} mg/dL\n*Requesting:* ${neo}\n*Time:* ${time}\nPlease review urgently.`;
+
+  const payload = { text: msgText };
+  const statusEl = document.getElementById('webhookStatus');
+  statusEl.className = 'webhook-status idle';
+  statusEl.textContent = 'Sending…';
+
+  try {
+    const resp = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (resp.ok) {
+      statusEl.className = 'webhook-status ok';
+      statusEl.textContent = '✓ Sent to Google Chat';
+      showToast('✓ Message sent to Google Chat', 'success');
+      addAudit('Google Chat message sent successfully');
+    } else {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+  } catch(e) {
+    statusEl.className = 'webhook-status err';
+    statusEl.textContent = '✗ Send failed';
+    showToast(`✗ Webhook error: ${e.message}`, 'error');
+    addAudit(`Google Chat send failed: ${e.message}`);
+  }
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────
+function addAudit(msg) {
+  const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  auditLog.unshift({ time, msg });
+  renderAudit();
+}
+function renderAudit() {
+  const logEl = document.getElementById('auditLog');
+  const entries = document.getElementById('auditEntries');
+  if (!auditLog.length) { logEl.classList.remove('show'); return; }
+  logEl.classList.add('show');
+  entries.innerHTML = auditLog.map(e =>
+    `<div class="audit-entry"><div class="audit-time">${e.time}</div><div class="audit-msg">${e.msg}</div></div>`).join('');
+}
+function clearAudit() { auditLog = []; renderAudit(); }
+
+// ─── TOAST ────────────────────────────────────────────────────
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  setTimeout(() => el.className = 'toast', 3500);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+renderCondGrid();
+renderCats();
+renderGrid();
+updateVitalDots();
+renderProtocolBrowser();
+updateSecBadges();
+</script>
+</body>
+</html>
